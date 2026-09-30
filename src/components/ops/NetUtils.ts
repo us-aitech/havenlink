@@ -21,11 +21,11 @@ export const ONT_ALARM_RANK: Record<OntStatus, number> = {
   online: 3,
 }
 
-export const ONT_TILE_CLASS: Record<OntStatus, string> = {
-  online: 'bg-emerald-500/10 text-emerald-200 ring-emerald-500/25 hover:bg-emerald-500/20',
-  degraded: 'bg-amber-500/15 text-amber-200 ring-amber-400/50 hover:bg-amber-500/25',
-  los: 'bg-rose-500/20 text-rose-100 ring-rose-500/60 hover:bg-rose-500/30',
-  offline: 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/30 hover:bg-zinc-500/20',
+export const ONT_CELL_CLASS: Record<OntStatus, string> = {
+  online: 'bg-good',
+  degraded: 'bg-warning',
+  los: 'bg-critical',
+  offline: 'bg-neutral',
 }
 
 export const ONT_ISSUE: Record<OntStatus, string> = {
