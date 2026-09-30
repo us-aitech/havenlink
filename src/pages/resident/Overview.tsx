@@ -268,7 +268,7 @@ export default function Overview() {
       </Card>
 
       <SectionTitle>Scenes</SectionTitle>
-      <div className="-mx-4 mb-8 flex snap-x gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-5">
+      <div className="-mx-4 mb-8 flex snap-x gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0 md:grid-cols-5">
         {home.scenes.map((scene) => (
           <SceneTile
             key={scene.id}
