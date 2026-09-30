@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Calculator, RotateCcw } from 'lucide-react'
-import { Button, Card, CardHeader, Slider } from '@/components/ui'
+import { RotateCcw } from 'lucide-react'
+import { Button, Card, CardHeader, KeyValue, Slider } from '@/components/ui'
 import { currency, num } from '@/lib/format'
 
 export interface ArpuInputs {
@@ -29,11 +29,11 @@ function SliderRow({ label, value, min, max, step, onChange, display, minLabel, 
   return (
     <div>
       <div className="mb-2 flex items-baseline justify-between gap-3">
-        <span className="text-xs font-medium text-fg-3">{label}</span>
-        <span className="text-sm font-semibold text-fg tabular">{display}</span>
+        <span className="text-[13px] font-medium text-fg-2">{label}</span>
+        <span className="text-[13px] font-semibold text-fg tabular">{display}</span>
       </div>
       <Slider value={value} min={min} max={max} step={step} onChange={onChange} label={label} />
-      <div className="mt-1 flex justify-between text-[10px] text-fg-4 tabular">
+      <div className="mt-1 flex justify-between text-xs text-fg-3 tabular">
         <span>{minLabel}</span>
         <span>{maxLabel}</span>
       </div>
@@ -50,7 +50,7 @@ export function RevArpuCalculator({ portfolio }: { portfolio: Omit<ArpuInputs, '
   const partnerShare = (packageRevenue * inputs.share) / 100
   const ispShare = packageRevenue - partnerShare
   const arpu = inputs.units ? ispShare / inputs.units : 0
-  const ispRatio = packageRevenue ? ispShare / packageRevenue : 0
+  const ispRatio = packageRevenue ? ispShare / packageRevenue : 1 - inputs.share / 100
 
   function loadPortfolio() {
     setInputs((prev) => ({
@@ -63,19 +63,19 @@ export function RevArpuCalculator({ portfolio }: { portfolio: Omit<ArpuInputs, '
 
   return (
     <Card>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <CardHeader title="ARPU uplift calculator" subtitle="What smart-home packages add to the ISP’s revenue per subscriber" icon={Calculator} className="mb-0!" />
-        <div className="flex gap-1.5 self-start">
-          <Button size="xs" variant="secondary" onClick={loadPortfolio}>
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <CardHeader title="ARPU uplift calculator" subtitle="What smart-home packages add to the ISP’s revenue per subscriber" className="mb-0" />
+        <div className="flex shrink-0 gap-2">
+          <Button size="sm" onClick={loadPortfolio}>
             Use current portfolio
           </Button>
-          <Button size="xs" variant="ghost" icon={RotateCcw} onClick={() => setInputs(DEFAULTS)} aria-label="Reset calculator">
+          <Button size="sm" variant="ghost" icon={RotateCcw} onClick={() => setInputs(DEFAULTS)}>
             Reset
           </Button>
         </div>
       </div>
-      <div className="grid gap-6 md:grid-cols-2">
-        <div className="flex flex-col gap-5">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
+        <div className="flex flex-col gap-6">
           <SliderRow label="Subscribers (units)" value={inputs.units} min={100} max={5000} step={1} onChange={(v) => set({ units: v })} display={num(inputs.units)} minLabel="100" maxLabel="5,000" />
           <SliderRow label="Smart-home adoption" value={inputs.adoption} min={5} max={80} step={1} onChange={(v) => set({ adoption: v })} display={`${inputs.adoption}%`} minLabel="5%" maxLabel="80%" />
           <SliderRow
@@ -92,58 +92,43 @@ export function RevArpuCalculator({ portfolio }: { portfolio: Omit<ArpuInputs, '
           <SliderRow label="Partner revenue share" value={inputs.share} min={10} max={50} step={1} onChange={(v) => set({ share: v })} display={`${inputs.share}%`} minLabel="10%" maxLabel="50%" />
         </div>
 
-        <div className="flex flex-col gap-4">
-          <div className="rounded-xl bg-accent-soft p-4 ring-1 ring-inset ring-accent-line">
-            <div className="text-xs font-medium text-accent-fg">Added ISP ARPU</div>
-            <div className="mt-1 flex items-baseline gap-1.5">
-              <span className="text-4xl font-semibold tracking-tight text-fg">+{cents(arpu)}</span>
-              <span className="text-sm text-fg-3">per subscriber / mo</span>
+        <div className="flex flex-col rounded-lg bg-surface-2 p-5" aria-live="polite">
+          <div className="text-[13px] font-medium text-fg-3">Added ISP ARPU</div>
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
+            <span className="text-3xl leading-9 font-semibold tracking-[-0.02em] text-fg">+{cents(arpu)}</span>
+            <span className="text-[13px] text-fg-3">per subscriber / month</span>
+          </div>
+          <div className="mt-1 text-xs text-fg-3">
+            Averaged across {num(inputs.units)} subscribers, {num(homes)} with smart home
+          </div>
+
+          <div className="mt-5">
+            <div className="flex h-2 w-full gap-0.5 overflow-hidden rounded-full" aria-hidden>
+              <span className="h-full rounded-l-full bg-accent" style={{ width: `${ispRatio * 100}%` }} />
+              <span className="h-full flex-1 rounded-r-full bg-neutral" />
             </div>
-            <div className="mt-1 text-xs text-fg-3">
-              Averaged across all {num(inputs.units)} subscribers · {num(homes)} smart-home homes
+            <div className="mt-2 flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs text-fg-3">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-2 rounded-[2px] bg-accent" />
+                ISP keeps {100 - inputs.share}%
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-2 rounded-[2px] bg-neutral" />
+                Partner share {inputs.share}%
+              </span>
             </div>
           </div>
 
-          <div>
-            <div className="mb-2 flex items-baseline justify-between text-xs">
-              <span className="text-fg-3">Monthly package revenue</span>
-              <span className="text-sm font-semibold text-fg tabular">{currency(packageRevenue)}</span>
-            </div>
-            <div className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-surface-2" aria-hidden>
-              <span className="h-full bg-accent" style={{ width: `${ispRatio * 100}%` }} />
-              <span className="h-full flex-1 bg-neutral" />
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-              <div className="flex items-start gap-2">
-                <span className="mt-1 size-2.5 shrink-0 rounded-[3px] bg-accent" />
-                <div>
-                  <div className="text-fg-3">ISP share · {100 - inputs.share}%</div>
-                  <div className="font-semibold text-fg tabular">{currency(ispShare)}/mo</div>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="mt-1 size-2.5 shrink-0 rounded-[3px] bg-neutral" />
-                <div>
-                  <div className="text-fg-3">Partner share · {inputs.share}%</div>
-                  <div className="font-semibold text-fg tabular">{currency(partnerShare)}/mo</div>
-                </div>
-              </div>
-            </div>
+          <div className="mt-4 divide-y divide-border border-t border-border">
+            <KeyValue label="Monthly package revenue" value={<span className="tabular">{currency(packageRevenue)}</span>} />
+            <KeyValue label="ISP share, monthly" value={<span className="tabular">{currency(ispShare)}</span>} />
+            <KeyValue label="Partner share, monthly" value={<span className="tabular">{currency(partnerShare)}</span>} />
+            <KeyValue label="ISP revenue, annualized" value={<span className="tabular">{currency(ispShare * 12)}</span>} />
           </div>
 
-          <dl className="grid grid-cols-2 gap-2">
-            <div className="rounded-xl bg-surface-2 px-3 py-2.5 ring-1 ring-inset ring-border">
-              <dt className="text-[11px] text-fg-3">Annualized ISP revenue</dt>
-              <dd className="mt-0.5 text-base font-semibold text-fg">{currency(ispShare * 12)}</dd>
-            </div>
-            <div className="rounded-xl bg-surface-2 px-3 py-2.5 ring-1 ring-inset ring-border">
-              <dt className="text-[11px] text-fg-3">Annualized package revenue</dt>
-              <dd className="mt-0.5 text-base font-semibold text-fg">{currency(packageRevenue * 12)}</dd>
-            </div>
-          </dl>
-          <p className="text-[11px] leading-relaxed text-fg-3">
-            ISP keeps {cents(inputs.price * (1 - inputs.share / 100))} of every {cents(inputs.price)} package per month with zero truck rolls — install, WiFi optimization, onboarding and support are
-            handled by the field-services partner. Install fees excluded.
+          <p className="mt-auto pt-4 text-xs leading-5 text-fg-3">
+            The ISP keeps {cents(inputs.price * (1 - inputs.share / 100))} of every {cents(inputs.price)} package each month with no truck rolls. Install, WiFi optimization, onboarding and support are
+            handled by the field-services partner. Install fees are excluded.
           </p>
         </div>
       </div>

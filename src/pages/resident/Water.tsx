@@ -1,12 +1,39 @@
-import { AlertTriangle, BatteryMedium, CheckCircle2, Droplets, Gauge, History, Power, ShieldCheck, Timer, Waves, Wrench } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { CheckCircle2, Droplets, Power } from 'lucide-react'
 import { BarChart } from '@/components/charts/BarChart'
 import { TimeSeriesChart } from '@/components/charts/TimeSeriesChart'
 import { EventFeed } from '@/components/EventFeed'
+import { ListRow } from '@/components/home/ListRow'
 import { PipeDiagram } from '@/components/home/PipeDiagram'
+import { HERO_CARD, HERO_TINT, StatusHero } from '@/components/home/StatusHero'
 import { Badge, Button, Card, CardHeader, PageHeader, ProgressBar, Slider, Stat, Toggle, type Tone } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { formatClock, num } from '@/lib/format'
 import { useStore } from '@/store/useStore'
+
+function RuleRow({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3.5">
+      <div className="min-w-0">
+        <div className="text-[13px] leading-5 font-medium text-fg">{title}</div>
+        {description && <div className="text-xs leading-4 text-fg-3">{description}</div>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function SliderRow({ title, value, children }: { title: string; value: string; children: ReactNode }) {
+  return (
+    <div className="py-3.5">
+      <div className="mb-2.5 flex items-center justify-between gap-4 text-[13px] leading-5">
+        <span className="font-medium text-fg">{title}</span>
+        <span className="text-fg-2 tabular">{value}</span>
+      </div>
+      {children}
+    </div>
+  )
+}
 
 export default function Water() {
   const water = useStore((s) => s.home.water)
@@ -18,209 +45,225 @@ export default function Water() {
 
   const leak = water.status === 'leak'
   const warning = water.status === 'warning'
+  const closed = water.valve === 'closed'
   const tone: Tone = leak ? 'critical' : warning ? 'warning' : water.valve === 'open' ? 'good' : 'warning'
-  const headline = leak
-    ? water.valve === 'closed'
-      ? 'Leak contained — water is off'
-      : water.valve === 'closing'
-        ? 'Leak detected — closing main valve…'
-        : 'Leak detected — valve is OPEN'
+  const label = leak
+    ? closed
+      ? 'Leak contained'
+      : 'Leak detected'
     : warning
-      ? 'Unusual continuous flow'
+      ? 'Watching continuous flow'
+      : water.valve === 'open'
+        ? 'Protected'
+        : water.valve === 'closed'
+          ? 'Valve closed'
+          : water.valve === 'opening'
+            ? 'Restoring water'
+            : 'Closing valve'
+  const headline = leak
+    ? closed
+      ? 'Leak contained. Water is off.'
+      : water.valve === 'closing'
+        ? 'Leak detected. Closing the main valve.'
+        : 'Leak detected. The main valve is open.'
+    : warning
+      ? 'Water has been running unusually long'
       : water.valve === 'closed'
-        ? 'Main valve closed'
+        ? 'Main valve is closed'
         : water.valve === 'opening'
-          ? 'Restoring water…'
-          : 'Your home is protected'
+          ? 'Restoring water to your home'
+          : water.valve === 'closing'
+            ? 'Closing the main valve'
+            : 'Your home is protected'
+  const description = leak
+    ? `${water.leakCause}. Detected at ${water.leakDetectedAt ? formatClock(water.leakDetectedAt) : '—'}.${water.settings.notifyOps ? ' Your field-services team has been notified.' : ''}`
+    : warning
+      ? `Continuous flow for ${Math.round(water.continuousFlowMinutes)} min. The valve closes automatically at ${water.settings.maxContinuousMinutes} min.`
+      : water.valve === 'closed'
+        ? 'Water to the house is off. Open the valve to restore supply.'
+        : water.activeFixture
+          ? `${water.activeFixture.name} in use at ${water.flowGpm.toFixed(1)} GPM. Normal usage pattern.`
+          : `No water running. Flow, pressure and ${water.leakSensors.length} leak sensors are monitored around the clock.`
   const continuousRatio = water.continuousFlowMinutes / water.settings.maxContinuousMinutes
+  const wet = water.leakSensors.filter((s) => s.wet).length
   const waterEvents = events.filter((e) => e.scope !== 'ops' && (e.category === 'water' || (e.category === 'automation' && e.title.toLowerCase().includes('shut'))))
+  const heroTint = leak ? 'critical' : warning ? 'warning' : null
 
   return (
     <>
-      <PageHeader
-        eyebrow="Water protection"
-        title="Leak detection & automatic shut-off"
-        subtitle="Flow sensor and motorized valve on the main line, plus leak sensors at every risk point."
-      />
+      <PageHeader eyebrow="Water" title="Leak detection and automatic shut-off" subtitle="A flow sensor and motorized valve on the main line, plus leak sensors at every risk point." />
 
-      <Card className={cn('mb-4 overflow-hidden', leak && 'border-critical-line bg-critical-soft', warning && 'border-warning-line')} padded={false}>
-        <div className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-start gap-4">
-            <div
-              className={cn(
-                'flex size-12 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset',
-                leak ? 'bg-critical-soft text-critical-fg ring-critical-line' : warning ? 'bg-warning-soft text-warning-fg ring-warning-line' : 'bg-good-soft text-good-fg ring-good-line',
-              )}
-            >
-              {leak ? <AlertTriangle className="size-6" /> : warning ? <Timer className="size-6" /> : <ShieldCheck className="size-6" />}
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-semibold text-fg">{headline}</h2>
-                <Badge tone={tone} dot>
-                  {leak ? 'Leak' : warning ? 'Watching' : 'Normal'}
-                </Badge>
-              </div>
-              <p className="mt-1 max-w-2xl text-sm text-fg-3">
-                {leak
-                  ? `${water.leakCause}. Detected at ${water.leakDetectedAt ? formatClock(water.leakDetectedAt) : '—'}. Your field-services team has been notified.`
-                  : warning
-                    ? `Water has been running for ${Math.round(water.continuousFlowMinutes)} min. If it reaches ${water.settings.maxContinuousMinutes} min the valve closes automatically.`
-                    : water.activeFixture
-                      ? `${water.activeFixture.name} in use · ${water.flowGpm.toFixed(1)} GPM — normal usage pattern.`
-                      : 'No water running right now. Flow, pressure and 5 leak sensors are monitored 24/7.'}
-              </p>
-            </div>
-          </div>
-          <div className="flex shrink-0 flex-wrap gap-2">
-            {leak ? (
-              <>
-                <Button variant="success" icon={CheckCircle2} onClick={resolveLeak}>
-                  Fixed — restore water
-                </Button>
-                {water.valve === 'open' && (
-                  <Button variant="danger" icon={Power} onClick={() => setValve(false)}>
-                    Close valve now
+      <Card padded={false} className={cn('mb-6 overflow-hidden', heroTint && HERO_CARD[heroTint])}>
+        <div className={cn('p-5 sm:p-6', heroTint && HERO_TINT[heroTint])}>
+          <StatusHero
+            tone={tone}
+            pulse={leak}
+            label={label}
+            title={headline}
+            description={description}
+            actions={
+              leak ? (
+                <>
+                  {water.valve === 'open' && (
+                    <Button variant="danger" icon={Power} onClick={() => setValve(false)}>
+                      Close valve now
+                    </Button>
+                  )}
+                  <Button variant={water.valve === 'open' ? 'secondary' : 'primary'} icon={CheckCircle2} onClick={resolveLeak}>
+                    Leak fixed, restore water
                   </Button>
-                )}
-              </>
-            ) : water.valve === 'open' || water.valve === 'opening' ? (
-              <Button variant="secondary" icon={Power} onClick={() => setValve(false)} disabled={water.valve === 'opening'}>
-                Close main valve
-              </Button>
-            ) : (
-              <Button variant="primary" icon={Power} onClick={() => setValve(true)} disabled={water.valve === 'closing'}>
-                Open main valve
-              </Button>
-            )}
-          </div>
+                </>
+              ) : water.valve === 'open' || water.valve === 'opening' ? (
+                <Button icon={Power} onClick={() => setValve(false)} disabled={water.valve === 'opening'}>
+                  Close main valve
+                </Button>
+              ) : (
+                <Button variant="primary" icon={Power} onClick={() => setValve(true)} disabled={water.valve === 'closing'}>
+                  Open main valve
+                </Button>
+              )
+            }
+          />
         </div>
-        <div className="border-t border-border bg-surface-2 px-3 py-2 sm:px-6">
+        <div className="border-t border-border bg-surface-2 px-2 pt-6 pb-5 sm:px-8">
           <PipeDiagram flow={water.flowGpm} valve={water.valve} status={water.status} pressure={water.pressurePsi} />
         </div>
       </Card>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Flow right now" value={water.flowGpm.toFixed(1)} unit="GPM" icon={Waves} tone={water.flowGpm > water.settings.maxFlowGpm ? 'critical' : 'info'} hint={water.activeFixture ? water.activeFixture.name : water.flowGpm > 0 ? 'Unidentified flow' : 'Idle'} />
-        <Stat label="Line pressure" value={water.pressurePsi.toFixed(0)} unit="psi" icon={Gauge} tone={water.pressurePsi < 40 && water.valve === 'open' ? 'warning' : 'good'} hint={water.valve === 'closed' ? 'Isolated — valve closed' : 'Normal range 50–70 psi'} />
-        <Stat label="Used today" value={num(water.todayGallons)} unit="gal" icon={Droplets} tone="info" hint={`${num(water.monthGallons)} gal this month`} />
-        <Card className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-fg-3">Continuous flow</span>
-            <Timer className={cn('size-4', continuousRatio > 0.7 ? 'text-warning-fg' : 'text-fg-3')} />
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-semibold text-fg tabular">{Math.round(water.continuousFlowMinutes)}</span>
-            <span className="text-sm text-fg-3">/ {water.settings.maxContinuousMinutes} min</span>
-          </div>
-          <ProgressBar value={continuousRatio} tone={continuousRatio > 0.7 ? 'warning' : 'accent'} />
-        </Card>
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Stat
+          label="Flow now"
+          value={water.flowGpm.toFixed(1)}
+          unit="GPM"
+          tone={water.flowGpm > water.settings.maxFlowGpm ? 'critical' : 'neutral'}
+          hint={water.activeFixture ? water.activeFixture.name : water.flowGpm > 0.02 ? 'Unidentified flow' : 'No water running'}
+        />
+        <Stat
+          label="Line pressure"
+          value={water.pressurePsi.toFixed(0)}
+          unit="psi"
+          tone={water.pressurePsi < 40 && water.valve === 'open' ? 'warning' : 'neutral'}
+          hint={water.valve === 'closed' ? 'Isolated, valve closed' : 'Normal range 50–70 psi'}
+        />
+        <Stat label="Used today" value={num(water.todayGallons)} unit="gal" hint={`${num(water.monthGallons)} gal this month`} />
+        <Stat
+          label="Continuous flow"
+          value={Math.round(water.continuousFlowMinutes)}
+          unit={`of ${water.settings.maxContinuousMinutes} min`}
+          tone={continuousRatio > 0.7 ? 'warning' : 'neutral'}
+          hint={<ProgressBar className="mt-2" value={continuousRatio} tone={continuousRatio > 0.7 ? 'warning' : 'accent'} />}
+        />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Card className="flex min-w-0 flex-col lg:col-span-2">
           <CardHeader
             title="Live flow rate"
-            subtitle="Last 2 minutes · dashed line is the burst-pipe limit"
-            icon={Waves}
-            action={<Badge tone={water.flowGpm > 0 ? 'info' : 'neutral'} dot>{water.flowGpm > 0 ? 'Water running' : 'Idle'}</Badge>}
+            subtitle={`Last 2 minutes · shut-off above ${water.settings.maxFlowGpm} GPM`}
+            action={
+              <Badge tone={water.flowGpm > 0.02 ? 'info' : 'neutral'} dot>
+                {water.flowGpm > 0.02 ? 'Water running' : 'Idle'}
+              </Badge>
+            }
           />
-          <TimeSeriesChart
-            label="Water flow rate in gallons per minute over the last two minutes"
-            data={water.history.map((h) => ({ t: h.t, v: h.gpm }))}
-            unit="GPM"
-            height={210}
-            threshold={{ value: water.settings.maxFlowGpm, label: `Shut-off above ${water.settings.maxFlowGpm} GPM` }}
-            formatValue={(v) => v.toFixed(2)}
-          />
+          <div className="mt-auto">
+            <TimeSeriesChart
+              label="Water flow rate in gallons per minute over the last two minutes"
+              data={water.history.map((h) => ({ t: h.t, v: h.gpm }))}
+              unit="GPM"
+              height={272}
+              threshold={{ value: water.settings.maxFlowGpm, label: `Shut-off ${water.settings.maxFlowGpm} GPM` }}
+              formatValue={(v) => v.toFixed(2)}
+            />
+          </div>
         </Card>
 
-        <Card>
-          <CardHeader title="Protection rules" subtitle="Demo clock: 1 second = 1 minute" icon={ShieldCheck} />
-          <div className="flex flex-col gap-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-medium text-fg">Automatic shut-off</div>
-                <div className="text-xs text-fg-3">Close the main valve when a leak is detected</div>
-              </div>
+        <Card className="flex flex-col overflow-hidden">
+          <CardHeader title="Protection rules" subtitle="Demo clock: 1 second = 1 minute" className="mb-1" />
+          <div className="divide-y divide-border">
+            <RuleRow title="Automatic shut-off" description="Close the main valve when a leak is detected">
               <Toggle checked={water.settings.autoShutoff} onChange={(v) => updateSettings({ autoShutoff: v })} tone="good" label="Automatic shut-off" />
-            </div>
-            <div>
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="text-fg-2">Max flow rate</span>
-                <span className="font-medium text-fg tabular">{water.settings.maxFlowGpm} GPM</span>
-              </div>
+            </RuleRow>
+            <SliderRow title="Max flow rate" value={`${water.settings.maxFlowGpm} GPM`}>
               <Slider label="Max flow rate" value={water.settings.maxFlowGpm} min={3} max={12} step={0.5} onChange={(v) => updateSettings({ maxFlowGpm: v })} />
-            </div>
-            <div>
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="text-fg-2">Max continuous flow</span>
-                <span className="font-medium text-fg tabular">{water.settings.maxContinuousMinutes} min</span>
-              </div>
+            </SliderRow>
+            <SliderRow title="Max continuous flow" value={`${water.settings.maxContinuousMinutes} min`}>
               <Slider label="Max continuous flow" value={water.settings.maxContinuousMinutes} min={10} max={120} step={5} onChange={(v) => updateSettings({ maxContinuousMinutes: v })} />
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-medium text-fg">Notify field-services team</div>
-                <div className="text-xs text-fg-3">Opens a follow-up ticket automatically</div>
-              </div>
+            </SliderRow>
+            <RuleRow title="Notify field-services team" description="Opens a follow-up ticket automatically">
               <Toggle checked={water.settings.notifyOps} onChange={(v) => updateSettings({ notifyOps: v })} label="Notify field-services team" />
+            </RuleRow>
+          </div>
+          <div className="-mx-5 mt-auto -mb-5 grid grid-cols-2 divide-x divide-border border-t border-border bg-surface-2">
+            <div className="px-5 py-3">
+              <div className="text-xs text-fg-3">Automatic shut-offs</div>
+              <div className="text-base leading-6 font-semibold text-fg tabular">{water.shutoffCount}</div>
             </div>
-            <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-surface-2 p-3 text-center">
-              <div>
-                <div className="text-lg font-semibold text-fg tabular">{water.shutoffCount}</div>
-                <div className="text-[11px] text-fg-3">Auto shut-offs</div>
-              </div>
-              <div>
-                <div className="text-lg font-semibold text-good-fg tabular">{num(water.gallonsSaved)}</div>
-                <div className="text-[11px] text-fg-3">Gallons of damage avoided</div>
+            <div className="px-5 py-3">
+              <div className="text-xs text-fg-3">Damage avoided</div>
+              <div className="text-base leading-6 font-semibold text-fg tabular">
+                {num(water.gallonsSaved)} <span className="text-[13px] font-medium text-fg-3">gal</span>
               </div>
             </div>
           </div>
         </Card>
 
-        <Card className="lg:col-span-2">
-          <CardHeader title="Leak sensors" subtitle="Tap “Test” to simulate water at a sensor" icon={Droplets} />
-          <div className="grid gap-2 sm:grid-cols-2">
+        <Card padded={false} className="min-w-0 lg:col-span-2">
+          <div className="px-5 pt-5">
+            <CardHeader
+              title="Leak sensors"
+              subtitle="Use Test to simulate water at a sensor"
+              className="mb-2"
+              action={
+                <Badge tone={wet ? 'critical' : 'good'} dot>
+                  {wet ? `${wet} wet` : 'All dry'}
+                </Badge>
+              }
+            />
+          </div>
+          <div className="divide-y divide-border border-t border-border">
             {water.leakSensors.map((s) => (
-              <div key={s.id} className={cn('flex items-center gap-3 rounded-xl border p-3', s.wet ? 'border-critical-line bg-critical-soft' : 'border-border bg-surface-2')}>
-                <div className={cn('flex size-9 items-center justify-center rounded-lg', s.wet ? 'bg-critical-soft text-critical-fg' : 'bg-surface-2 text-fg-3')}>
-                  <Droplets className="size-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-fg">{s.name}</div>
-                  <div className="flex items-center gap-2 text-xs text-fg-3">
-                    {s.location}
-                    <span className="inline-flex items-center gap-0.5">
-                      <BatteryMedium className="size-3" />
-                      {s.battery}%
-                    </span>
-                  </div>
-                </div>
-                {s.wet ? (
-                  <Badge tone="critical" icon={AlertTriangle}>
-                    WET
-                  </Badge>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Badge tone="good">Dry</Badge>
-                    <Button size="xs" variant="ghost" onClick={() => setSensorWet(s.id, true)}>
-                      Test
-                    </Button>
-                  </div>
-                )}
-              </div>
+              <ListRow
+                key={s.id}
+                className={cn('px-5', s.wet && 'bg-critical-soft')}
+                icon={Droplets}
+                iconClassName={s.wet ? 'text-critical-fg' : undefined}
+                title={s.name}
+                meta={`${s.location} · ${s.battery}% battery`}
+                trailing={
+                  s.wet ? (
+                    <Badge tone="critical" dot>
+                      Water detected
+                    </Badge>
+                  ) : (
+                    <>
+                      <Badge tone="good">Dry</Badge>
+                      <Button size="xs" variant="ghost" onClick={() => setSensorWet(s.id, true)}>
+                        Test
+                      </Button>
+                    </>
+                  )
+                }
+              />
             ))}
           </div>
         </Card>
 
-        <Card>
-          <CardHeader title="Daily usage" subtitle="Gallons per day, last 7 days" icon={History} />
-          <BarChart label="Daily water usage in gallons for the last seven days" data={water.dailyUsage.map((d) => ({ label: d.day, value: d.gallons }))} unit="gal" height={170} formatValue={(v) => num(v)} />
+        <Card className="flex flex-col">
+          <CardHeader title="Daily usage" subtitle="Gallons per day, last 7 days" />
+          <div className="mt-auto">
+            <BarChart
+              label="Daily water usage in gallons for the last seven days"
+              data={water.dailyUsage.map((d) => ({ label: d.day, value: d.gallons }))}
+              unit="gal"
+              height={232}
+              formatValue={(v) => num(v)}
+            />
+          </div>
         </Card>
 
         <Card className="lg:col-span-3">
-          <CardHeader title="Water activity" icon={Wrench} />
+          <CardHeader title="Water activity" subtitle="Leaks, shut-offs and valve changes" />
           <EventFeed events={waterEvents} limit={8} emptyText="No water events yet" />
         </Card>
       </div>

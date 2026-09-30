@@ -1,38 +1,24 @@
 import { useMemo } from 'react'
-import { Link, useSearchParams } from 'react-router'
-import { Activity, ArrowRight, Bell, ChevronRight, Crosshair, Gauge, Network, Server, Siren, type LucideIcon } from 'lucide-react'
-import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, ProgressBar, Select, TONE_SOFT, type Tone } from '@/components/ui'
+import { useNavigate, useSearchParams } from 'react-router'
+import { ArrowRight, ChevronRight, Crosshair, Network, Siren } from 'lucide-react'
+import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, ProgressBar, Select, Stat, StatusDot, type Tone } from '@/components/ui'
 import { NetOntDrawer } from '@/components/ops/NetOntDrawer'
 import { OntStatusBadge } from '@/components/ops/NetParts'
 import { NetTopology, NetTopologyLegend } from '@/components/ops/NetTopology'
-import { ONT_ALARM_RANK, ONT_STATUS_ICON, detectFiberCuts, type CutDetection } from '@/components/ops/NetUtils'
+import { ONT_ALARM_RANK, detectFiberCuts, type CutDetection } from '@/components/ops/NetUtils'
 import { AssigneeChip, SlaBadge } from '@/components/ops/WoParts'
 import { DEMO_PROPERTY_ID } from '@/data/seed'
 import { cn } from '@/lib/cn'
 import { dbm, num, pct, timeAgo } from '@/lib/format'
 import { useNow, usePartner } from '@/lib/hooks'
-import { ONT_STATUS_LABEL, ONT_STATUS_TONE, isOpen } from '@/lib/workflows'
+import { isOpen } from '@/lib/workflows'
 import { bestTechnicianFor } from '@/sim/engine'
 import { useStore } from '@/store/useStore'
 import type { OntStatus } from '@/types'
 
-function SummaryTile({ label, value, hint, icon: Icon, tone }: { label: string; value: string; hint?: string; icon: LucideIcon; tone: Tone }) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3">
-      <div className={cn('flex size-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset', TONE_SOFT[tone])}>
-        <Icon className="size-4" />
-      </div>
-      <div className="min-w-0">
-        <div className="truncate text-[11px] font-medium text-fg-3">{label}</div>
-        <div className="text-lg leading-tight font-semibold text-fg tabular">{value}</div>
-        {hint && <div className="truncate text-[11px] text-fg-3">{hint}</div>}
-      </div>
-    </div>
-  )
-}
-
 function FiberCutCallout({ cut, onLocate }: { cut: CutDetection; onLocate: (propertyId: string) => void }) {
   const now = useNow()
+  const navigate = useNavigate()
   const workOrders = useStore((s) => s.ops.workOrders)
   const technicians = useStore((s) => s.ops.technicians)
   const properties = useStore((s) => s.ops.properties)
@@ -59,45 +45,36 @@ function FiberCutCallout({ cut, onLocate }: { cut: CutDetection; onLocate: (prop
   }
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-critical-line bg-critical-soft p-4 sm:p-5">
-      <div className="pointer-events-none absolute inset-0 animate-siren opacity-60" />
-      <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center">
-        <div className="flex min-w-0 flex-1 gap-3">
-          <div className="relative flex size-11 shrink-0 items-center justify-center rounded-xl bg-critical-soft text-critical-fg ring-1 ring-critical-line ring-inset">
-            <Siren className="size-5" />
-            <span className="absolute -top-1 -right-1 size-3 animate-ping rounded-full bg-critical" />
-          </div>
+    <Card className="border-critical-line bg-critical-soft">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex min-w-0 gap-3">
+          <StatusDot tone="critical" pulse className="mt-1.5" />
           <div className="min-w-0">
-            <div className="text-[11px] font-semibold tracking-wider text-critical-fg uppercase">Critical · PON alarm</div>
-            <div className="mt-0.5 text-base font-semibold text-critical-fg">
-              Possible fiber cut upstream of {cut.splitter.name} ({cut.ontCount} ONTs LOS)
+            <div className="text-sm font-semibold text-critical-fg">
+              Possible fiber cut upstream of {cut.splitter.name} · {cut.ontCount} ONTs in LOS
             </div>
-            <div className="mt-1 text-xs text-critical-fg">
-              {property?.name} · {cut.splitter.cabinet} · every ONT on this {cut.splitter.ratio} splitter lost light at the same time, which points to a distribution cable cut rather than individual drops.
-            </div>
-            {wo && (
-              <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                <Badge tone="critical" className="font-mono">
-                  {wo.number}
-                </Badge>
+            <p className="mt-1 max-w-3xl text-[13px] text-fg-2">
+              {property?.name} · {cut.splitter.cabinet}. Every ONT on this {cut.splitter.ratio} splitter lost light at the same time, which points to a distribution cable cut rather than individual drops.
+            </p>
+            {wo ? (
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px]">
+                <span className="font-mono text-xs text-fg-2">{wo.number}</span>
                 <SlaBadge wo={wo} now={now} />
-                <AssigneeChip tech={tech} className="text-critical-fg" />
+                <AssigneeChip tech={tech} />
               </div>
+            ) : (
+              <div className="mt-3 text-[13px] font-medium text-critical-fg">No crew dispatched yet</div>
             )}
           </div>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2 pl-5 lg:pl-0">
           <Button variant="secondary" size="sm" icon={Crosshair} onClick={() => onLocate(cut.splitter.propertyId)}>
             Show in topology
           </Button>
           {wo ? (
-            <Link
-              to={`/ops/work-orders?id=${wo.id}`}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-critical px-3 text-xs font-medium text-white transition hover:bg-critical"
-            >
+            <Button variant="danger" size="sm" iconRight={ArrowRight} onClick={() => navigate(`/ops/work-orders?id=${wo.id}`)}>
               Open {wo.number}
-              <ArrowRight className="size-3.5" />
-            </Link>
+            </Button>
           ) : (
             <Button variant="danger" size="sm" icon={Siren} onClick={dispatch}>
               Dispatch emergency crew
@@ -105,7 +82,7 @@ function FiberCutCallout({ cut, onLocate }: { cut: CutDetection; onLocate: (prop
           )}
         </div>
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -178,102 +155,107 @@ export default function OpsNetwork() {
     [olts, properties, onts],
   )
 
-  const topoProperty = properties.find((p) => p.id === propertyId)
   const topoOnts = onts.filter((o) => o.propertyId === propertyId)
   const topoOnline = topoOnts.filter((o) => o.status === 'online').length
+  const topoProperty = properties.find((p) => p.id === propertyId)
   const propertyName = (id: string) => properties.find((p) => p.id === id)?.name ?? id
+  const splitterName = (id: string) => splitters.find((s) => s.id === id)?.name ?? id
   const ontById = (id: string) => onts.find((o) => o.id === id)
+  const onlineShare = counts.total ? counts.online / counts.total : 0
+
+  const headerStatus: { tone: Tone; text: string } = cuts.length
+    ? { tone: 'critical', text: `${cuts.length} critical PON alarm${cuts.length > 1 ? 's' : ''}` }
+    : alarms.length
+      ? { tone: 'warning', text: `${alarms.length} ONT alarm${alarms.length > 1 ? 's' : ''}` }
+      : { tone: 'good', text: 'No active alarms' }
 
   return (
     <>
       <PageHeader
-        eyebrow="Network operations"
         title="GPON network"
         subtitle={`${olts.length} OLTs · ${splitters.length} splitters · ${num(onts.length)} ONTs on ${partner.name} fiber`}
         actions={
-          <Badge tone={cuts.length ? 'critical' : alarms.length ? 'warning' : 'good'} dot>
-            {cuts.length ? `${cuts.length} critical PON alarm${cuts.length > 1 ? 's' : ''}` : `${alarms.length} ONT alarms`}
-          </Badge>
+          <span className="inline-flex items-center gap-2 text-[13px] text-fg-2">
+            <StatusDot tone={headerStatus.tone} pulse={headerStatus.tone === 'critical'} />
+            {headerStatus.text}
+          </span>
         }
       />
 
       {cuts.length > 0 && (
-        <div className="mb-5 flex flex-col gap-3">
+        <div className="mb-6 flex flex-col gap-4">
           {cuts.map((cut) => (
             <FiberCutCallout key={cut.splitter.id} cut={cut} onLocate={locate} />
           ))}
         </div>
       )}
 
-      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-        <SummaryTile label="ONTs online" value={pct(counts.total ? counts.online / counts.total : 0, 1)} hint={`${num(counts.online)} of ${num(counts.total)}`} icon={ONT_STATUS_ICON.online} tone="good" />
-        <SummaryTile label={ONT_STATUS_LABEL.degraded} value={String(counts.degraded)} hint="Below −27 dBm" icon={ONT_STATUS_ICON.degraded} tone={counts.degraded ? 'warning' : 'neutral'} />
-        <SummaryTile label="Loss of signal" value={String(counts.los)} hint={counts.los ? 'No light at ONT' : 'No LOS alarms'} icon={ONT_STATUS_ICON.los} tone={counts.los ? 'critical' : 'neutral'} />
-        <SummaryTile label={ONT_STATUS_LABEL.offline} value={String(counts.offline)} hint="Powered down / unreachable" icon={ONT_STATUS_ICON.offline} tone="neutral" />
-        <SummaryTile label="Avg Rx power" value={counts.avgRx === null ? '—' : `${counts.avgRx.toFixed(1)} dBm`} hint="Online & low-light ONTs" icon={Gauge} tone="accent" />
+      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+        <Stat label="ONTs online" value={pct(onlineShare, 1)} tone={onlineShare < 0.95 ? 'critical' : onlineShare < 0.98 ? 'warning' : 'neutral'} hint={`${num(counts.online)} of ${num(counts.total)}`} />
+        <Stat label="Low light" value={counts.degraded} tone={counts.degraded ? 'warning' : 'neutral'} hint="Rx below −27 dBm" />
+        <Stat label="Loss of signal" value={counts.los} tone={counts.los ? 'critical' : 'neutral'} hint={counts.los ? 'No light at the ONT' : 'No LOS alarms'} />
+        <Stat label="Offline" value={counts.offline} hint="Not responding" />
+        <Stat label="Average Rx power" value={counts.avgRx === null ? '—' : counts.avgRx.toFixed(1)} unit={counts.avgRx === null ? undefined : 'dBm'} hint="Across reachable ONTs" className="col-span-2 md:col-span-1" />
       </div>
 
-      <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         {oltStats.map(({ olt, served, total, online, alarmCount, los }) => {
           const utilization = olt.usedPorts / olt.ponPorts
+          const share = online / Math.max(1, total)
           return (
-            <Card key={olt.id} className="flex flex-col gap-4">
+            <Card key={olt.id} className="flex flex-col">
               <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-3">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-fg ring-1 ring-accent-line ring-inset">
-                    <Server className="size-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="font-mono text-sm font-semibold text-fg">{olt.name}</div>
-                    <div className="truncate text-xs text-fg-3">{olt.location}</div>
-                  </div>
+                <div className="min-w-0">
+                  <div className="font-mono text-[13px] font-semibold text-fg">{olt.name}</div>
+                  <div className="truncate text-xs text-fg-3">{olt.location}</div>
                 </div>
                 {los ? (
-                  <Badge tone="critical" icon={ONT_STATUS_ICON.los}>
+                  <Badge tone="critical" dot>
                     {los} LOS
                   </Badge>
                 ) : alarmCount ? (
-                  <Badge tone="warning" icon={Bell}>
+                  <Badge tone="warning" dot>
                     {alarmCount} alarm{alarmCount === 1 ? '' : 's'}
                   </Badge>
                 ) : (
                   <Badge tone="good" dot>
-                    No alarms
+                    Healthy
                   </Badge>
                 )}
               </div>
-              <div>
+              <dl className="mt-4 grid grid-cols-3 gap-3">
+                <div>
+                  <dt className="text-xs text-fg-3">ONTs</dt>
+                  <dd className="text-sm font-semibold text-fg tabular">{num(total)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-fg-3">Online</dt>
+                  <dd className={cn('text-sm font-semibold tabular', share < 0.95 ? 'text-critical-fg' : share < 0.98 ? 'text-warning-fg' : 'text-fg')}>{pct(share, 1)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-fg-3">Properties</dt>
+                  <dd className="text-sm font-semibold text-fg tabular">{served.length}</dd>
+                </div>
+              </dl>
+              <div className="mt-4">
                 <div className="mb-1.5 flex items-baseline justify-between text-xs">
-                  <span className="text-fg-3">PON ports</span>
-                  <span className="text-fg tabular">
-                    {olt.usedPorts}/{olt.ponPorts} <span className="text-fg-3">({pct(utilization)})</span>
+                  <span className="text-fg-3">PON ports in use</span>
+                  <span className="text-fg-2 tabular">
+                    {olt.usedPorts} of {olt.ponPorts} · {pct(utilization)}
                   </span>
                 </div>
                 <ProgressBar value={utilization} tone={utilization > 0.8 ? 'warning' : 'accent'} />
               </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-lg bg-surface-2 px-2 py-2 ring-1 ring-border ring-inset">
-                  <div className="text-sm font-semibold text-fg tabular">{total}</div>
-                  <div className="text-[10px] text-fg-3 uppercase">ONTs</div>
-                </div>
-                <div className="rounded-lg bg-surface-2 px-2 py-2 ring-1 ring-border ring-inset">
-                  <div className={cn('text-sm font-semibold tabular', online / Math.max(1, total) >= 0.98 ? 'text-good-fg' : 'text-warning-fg')}>{pct(online / Math.max(1, total), 1)}</div>
-                  <div className="text-[10px] text-fg-3 uppercase">Online</div>
-                </div>
-                <div className="rounded-lg bg-surface-2 px-2 py-2 ring-1 ring-border ring-inset">
-                  <div className="text-sm font-semibold text-fg tabular">{served.length}</div>
-                  <div className="text-[10px] text-fg-3 uppercase">Sites</div>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="mt-4 flex flex-wrap gap-1.5 border-t border-border pt-4">
                 {served.map((p) => (
                   <button
                     key={p.id}
                     type="button"
                     onClick={() => locate(p.id)}
+                    aria-pressed={p.id === propertyId}
                     className={cn(
-                      'rounded-md px-2 py-0.5 text-[11px] ring-1 transition ring-inset',
-                      p.id === propertyId ? 'bg-accent-soft text-accent-fg ring-accent-line' : 'bg-surface-2 text-fg-3 ring-border hover:text-fg',
+                      'inline-flex h-6 items-center rounded-md border px-2 text-xs transition-colors',
+                      p.id === propertyId ? 'border-accent-line bg-accent-soft text-accent-fg' : 'border-border text-fg-2 hover:border-border-strong hover:text-fg',
                     )}
                   >
                     {p.name}
@@ -285,83 +267,102 @@ export default function OpsNetwork() {
         })}
       </div>
 
-      <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-3" padded={false}>
-          <div className="px-4 pt-4 sm:px-5 sm:pt-5">
+      <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-12">
+        <Card padded={false} className="min-w-0 xl:col-span-7">
+          <div className="px-5 pt-5">
             <CardHeader
               title="Active alarms"
-              subtitle={`${alarms.length} ONTs not fully online · live`}
-              icon={Bell}
-              className="mb-3"
+              subtitle={`${alarms.length} ONTs not fully online`}
               action={
                 <div className="hidden flex-wrap justify-end gap-1.5 sm:flex">
-                  {(['los', 'degraded', 'offline'] as const).map((s) => (
-                    <Badge key={s} tone={ONT_STATUS_TONE[s]}>
-                      {counts[s]} {ONT_STATUS_LABEL[s]}
-                    </Badge>
-                  ))}
+                  <Badge tone={counts.los ? 'critical' : 'neutral'}>{counts.los} LOS</Badge>
+                  <Badge tone={counts.degraded ? 'warning' : 'neutral'}>{counts.degraded} low light</Badge>
+                  <Badge tone="neutral">{counts.offline} offline</Badge>
                 </div>
               }
             />
           </div>
           {alarms.length ? (
-            <ul className="max-h-[420px] divide-y divide-border overflow-y-auto border-t border-border">
-              {alarms.map((o) => (
-                <li key={o.id}>
-                  <button
-                    type="button"
-                    onClick={() => setParam('ont', o.id)}
-                    className={cn('flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-surface-3 sm:px-5', o.id === ontId && 'bg-surface-2')}
-                  >
-                    <OntStatusBadge status={o.status} className="w-[88px] justify-center" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-sm text-fg">{o.unit}</span>
-                        {o.isDemoHome && (
-                          <Badge tone="accent" className="hidden sm:inline-flex">
-                            Demo home
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="truncate text-xs text-fg-3">
-                        {propertyName(o.propertyId)} · <span className="font-mono">{splitters.find((s) => s.id === o.splitterId)?.name}</span>
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <div className={cn('font-mono text-xs', o.rxPowerDbm === null ? 'text-critical-fg' : 'text-warning-fg')}>{dbm(o.rxPowerDbm)}</div>
-                      <div className="hidden text-[11px] text-fg-3 sm:block">tested {timeAgo(o.lastTestAt, now)}</div>
-                    </div>
-                    <ChevronRight className="size-4 shrink-0 text-fg-4" />
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="max-h-[440px] overflow-auto">
+              <table className="w-full min-w-[520px] text-[13px]">
+                <thead className="sticky top-0 z-[1]">
+                  <tr className="border-y border-border bg-surface-2 text-left text-xs text-fg-3 shadow-[0_1px_0_var(--border)]">
+                    <th className="px-5 py-2 font-medium">Status</th>
+                    <th className="px-3 py-2 font-medium">Unit</th>
+                    <th className="px-3 py-2 font-medium">Splitter</th>
+                    <th className="px-3 py-2 text-right font-medium whitespace-nowrap">Rx power</th>
+                    <th className="px-3 py-2 text-right font-medium whitespace-nowrap">Last test</th>
+                    <th className="w-10 py-2 pr-5">
+                      <span className="sr-only">Open</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {alarms.map((o) => (
+                    <tr
+                      key={o.id}
+                      tabIndex={0}
+                      onClick={() => setParam('ont', o.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setParam('ont', o.id)
+                        }
+                      }}
+                      className={cn(
+                        'cursor-pointer transition-colors outline-none hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:shadow-[inset_2px_0_0_var(--accent)]',
+                        o.id === ontId && 'bg-accent-soft hover:bg-accent-soft',
+                      )}
+                    >
+                      <td className="px-5 py-2.5 whitespace-nowrap">
+                        <OntStatusBadge status={o.status} />
+                      </td>
+                      <td className="w-full max-w-0 px-3 py-2.5">
+                        <div className="truncate font-medium text-fg">{o.unit}</div>
+                        <div className="truncate text-xs text-fg-3">
+                          {propertyName(o.propertyId)}
+                          {o.isDemoHome && <span className="text-accent-fg"> · Demo home</span>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-xs whitespace-nowrap text-fg-2">{splitterName(o.splitterId)}</td>
+                      <td className={cn('px-3 py-2.5 text-right font-mono text-xs whitespace-nowrap tabular', o.rxPowerDbm === null ? 'text-critical-fg' : o.status === 'degraded' ? 'text-warning-fg' : 'text-fg-2')}>{dbm(o.rxPowerDbm)}</td>
+                      <td className="px-3 py-2.5 text-right text-xs whitespace-nowrap text-fg-3">{timeAgo(o.lastTestAt, now)}</td>
+                      <td className="py-2.5 pr-5 text-right">
+                        <ChevronRight className="ml-auto size-4 text-fg-4" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
-            <EmptyState icon={Network} title="All ONTs online" message="No LOS, low-light or offline alarms across the network." />
+            <div className="border-t border-border">
+              <EmptyState icon={Network} title="All ONTs online" message="No LOS, low-light or offline alarms across the network." />
+            </div>
           )}
         </Card>
 
-        <Card className="lg:col-span-2" padded={false}>
-          <div className="px-4 pt-4 sm:px-5 sm:pt-5">
-            <CardHeader title="Light-level tests" subtitle="Remote polls & field meter readings" icon={Activity} className="mb-3" />
+        <Card padded={false} className="min-w-0 xl:col-span-5">
+          <div className="px-5 pt-5">
+            <CardHeader title="Light-level tests" subtitle="Remote polls and field meter readings" />
           </div>
-          <ul className="max-h-[420px] divide-y divide-border overflow-y-auto border-t border-border">
+          <ul className="max-h-[440px] divide-y divide-border overflow-y-auto border-t border-border">
             {lightLevels.slice(0, 12).map((r) => {
               const ont = ontById(r.ontId)
               return (
                 <li key={r.id}>
-                  <button type="button" onClick={() => setParam('ont', r.ontId)} className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-surface-3 sm:px-5">
+                  <button type="button" onClick={() => setParam('ont', r.ontId)} className="flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors hover:bg-surface-2">
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm text-fg">{ont?.unit ?? r.ontId}</div>
+                      <div className="truncate text-[13px] font-medium text-fg">{ont?.unit ?? r.ontId}</div>
                       <div className="truncate text-xs text-fg-3">
                         {ont ? propertyName(ont.propertyId) : '—'} · {r.by}
                       </div>
                     </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      <span className="font-mono text-xs text-fg">{r.dbm.toFixed(1)} dBm</span>
-                      <span className="text-[11px] text-fg-3">{timeAgo(r.at, now)}</span>
+                    <div className="shrink-0 text-right">
+                      <div className="font-mono text-xs text-fg tabular">{r.dbm.toFixed(1)} dBm</div>
+                      <div className="text-xs text-fg-3">{timeAgo(r.at, now)}</div>
                     </div>
-                    <Badge tone={r.pass ? 'good' : 'critical'} className="w-12 justify-center">
+                    <Badge tone={r.pass ? 'good' : 'critical'} className="w-10 justify-center">
                       {r.pass ? 'Pass' : 'Fail'}
                     </Badge>
                   </button>
@@ -374,19 +375,12 @@ export default function OpsNetwork() {
 
       <div id="topology" className="scroll-mt-20">
         <Card padded={false}>
-          <div className="flex flex-col gap-4 border-b border-border p-4 sm:p-5 md:flex-row md:items-start md:justify-between">
-            <div className="flex min-w-0 items-start gap-3">
-              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-fg-2 ring-1 ring-border">
-                <Network className="size-4" />
-              </div>
-              <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-fg">Topology explorer</h3>
-                <p className="mt-0.5 text-xs text-fg-3">
-                  OLT → 1:4 feeder splitters → 1:8 distribution splitters → ONTs · {topoOnts.length} ONTs · {pct(topoOnts.length ? topoOnline / topoOnts.length : 0, 1)} online
-                </p>
-              </div>
+          <div className="flex flex-col gap-3 px-5 pt-5 pb-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h3 className="text-sm leading-5 font-semibold text-fg">Topology explorer</h3>
+              <p className="mt-0.5 text-[13px] leading-5 text-fg-3">OLT, 1:4 feeder splitters, 1:8 distribution splitters and ONTs</p>
             </div>
-            <Select value={propertyId} onChange={(e) => setParam('property', e.target.value)} className="md:w-72" aria-label="Property">
+            <Select value={propertyId} onChange={(e) => setParam('property', e.target.value)} className="w-full sm:w-72" aria-label="Property">
               {properties.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name} · {p.type}
@@ -394,13 +388,26 @@ export default function OpsNetwork() {
               ))}
             </Select>
           </div>
-          <div className="p-4 sm:p-5">
-            <NetTopologyLegend className="mb-5" />
-            {topoProperty ? (
-              <NetTopology propertyId={propertyId} selectedOntId={ontId} onSelectOnt={(id) => setParam('ont', id)} />
-            ) : (
-              <EmptyState icon={Network} title="Property not found" />
-            )}
+          <div className="flex flex-col gap-2 border-y border-border bg-surface-2 px-5 py-2.5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="text-xs text-fg-2 tabular">
+              <span className="font-medium text-fg">{topoProperty?.name}</span>
+              <span className="text-fg-4"> · </span>
+              {topoOnts.length} ONTs
+              <span className="text-fg-4"> · </span>
+              {pct(topoOnts.length ? topoOnline / topoOnts.length : 0, 1)} online
+              {topoOnts.length - topoOnline > 0 && (
+                <>
+                  <span className="text-fg-4"> · </span>
+                  <span className="font-medium text-warning-fg">
+                    {topoOnts.length - topoOnline} alarm{topoOnts.length - topoOnline > 1 ? 's' : ''}
+                  </span>
+                </>
+              )}
+            </div>
+            <NetTopologyLegend />
+          </div>
+          <div className="overflow-x-auto p-5">
+            {topoProperty ? <NetTopology propertyId={propertyId} selectedOntId={ontId} onSelectOnt={(id) => setParam('ont', id)} /> : <EmptyState icon={Network} title="Property not found" />}
           </div>
         </Card>
       </div>

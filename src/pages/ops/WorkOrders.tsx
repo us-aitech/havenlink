@@ -1,15 +1,15 @@
 import { useMemo, useState, type KeyboardEvent } from 'react'
 import { useSearchParams } from 'react-router'
-import { ClipboardList, Clock, OctagonAlert, Plus, Search, Siren, UserRound, CircleCheck, type LucideIcon } from 'lucide-react'
-import { Button, Card, EmptyState, Input, PageHeader, ProgressBar, Segmented, TONE_SOFT, type SegmentOption, type Tone } from '@/components/ui'
+import { ClipboardList, Plus, Search } from 'lucide-react'
+import { Button, Card, EmptyState, Input, PageHeader, Segmented, Select, Stat, type SegmentOption } from '@/components/ui'
 import { WoCreateModal } from '@/components/ops/WoCreateModal'
-import { AssigneeChip, PriorityBadge, SlaBadge, TypeBadge } from '@/components/ops/WoParts'
-import { WO_TYPE_ICON, WO_TYPE_ORDER, WO_TYPE_SHORT, compareWorkOrders } from '@/components/ops/WoUtils'
+import { AssigneeChip, PriorityBadge, SlaBadge, StageMeter, TypeLabel } from '@/components/ops/WoParts'
+import { WO_TYPE_ORDER, WO_TYPE_SHORT, compareWorkOrders } from '@/components/ops/WoUtils'
 import { WorkOrderDrawer } from '@/components/ops/WorkOrderDrawer'
 import { cn } from '@/lib/cn'
 import { timeAgo } from '@/lib/format'
 import { useNow, usePartner } from '@/lib/hooks'
-import { isOpen, slaState, stageLabel, stageProgress } from '@/lib/workflows'
+import { isOpen, slaState } from '@/lib/workflows'
 import { useStore } from '@/store/useStore'
 import type { Technician, WorkOrder, WorkOrderType } from '@/types'
 
@@ -18,22 +18,16 @@ type StatusFilter = 'open' | 'closed' | 'all'
 
 const DAY = 86_400_000
 
-function Metric({ label, value, icon: Icon, tone, hint, className }: { label: string; value: number | string; icon: LucideIcon; tone: Tone; hint?: string; className?: string }) {
-  return (
-    <div className={cn('flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3', className)}>
-      <div className={cn('hidden size-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset sm:flex', TONE_SOFT[tone])}>
-        <Icon className="size-4" />
-      </div>
-      <div className="min-w-0">
-        <div className="truncate text-[11px] font-medium text-fg-3">{label}</div>
-        <div className="text-lg leading-tight font-semibold text-fg tabular">{value}</div>
-        {hint && <div className="truncate text-[11px] text-fg-3">{hint}</div>}
-      </div>
-    </div>
-  )
+interface RowProps {
+  wo: WorkOrder
+  now: number
+  propertyName: string
+  tech: Technician | undefined
+  selected: boolean
+  onOpen: (id: string) => void
 }
 
-function WorkOrderRow({ wo, now, propertyName, tech, selected, onOpen }: { wo: WorkOrder; now: number; propertyName: string; tech: Technician | undefined; selected: boolean; onOpen: (id: string) => void }) {
+function WorkOrderRow({ wo, now, propertyName, tech, selected, onOpen }: RowProps) {
   const open = isOpen(wo)
   const onKey = (e: KeyboardEvent<HTMLTableRowElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -46,78 +40,63 @@ function WorkOrderRow({ wo, now, propertyName, tech, selected, onOpen }: { wo: W
       tabIndex={0}
       onClick={() => onOpen(wo.id)}
       onKeyDown={onKey}
-      className={cn('group cursor-pointer transition outline-none hover:bg-surface-3 focus-visible:bg-surface-2', selected && 'bg-accent-soft', !open && 'text-fg-3')}
+      aria-selected={selected}
+      className={cn('cursor-pointer transition-colors outline-none hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:shadow-[inset_2px_0_0_var(--accent)]', selected && 'bg-accent-soft hover:bg-accent-soft')}
     >
-      <td className="relative py-3 pr-2.5 pl-4 whitespace-nowrap">
-        {open && wo.priority === 'P1' && <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-r bg-critical" />}
-        {selected && <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-r bg-accent" />}
-        <div className="font-mono text-xs text-fg-2">{wo.number}</div>
-        <div className="mt-0.5 text-[11px] text-fg-3 tabular 2xl:hidden">{timeAgo(wo.createdAt, now)}</div>
+      <td className="py-3 pr-2 pl-5 align-top">
+        <PriorityBadge priority={wo.priority} className={cn('mt-px', !open && 'opacity-60')} />
       </td>
-      <td className="px-2.5 py-3">
-        <PriorityBadge priority={wo.priority} />
-      </td>
-      <td className="px-2.5 py-3">
-        <TypeBadge type={wo.type} short />
-      </td>
-      <td className="w-full max-w-0 px-2.5 py-3">
-        <div className={cn('truncate', open ? 'text-fg' : 'text-fg-2')} title={wo.title}>
+      <td className="px-3 py-3 align-top font-mono text-xs leading-5 whitespace-nowrap text-fg-3">{wo.number}</td>
+      <td className="w-full max-w-0 px-3 py-3">
+        <div className={cn('truncate text-[13px] leading-5 font-medium', open ? 'text-fg' : 'text-fg-2')} title={wo.title}>
           {wo.title}
         </div>
-        <div className="truncate text-xs text-fg-3">
-          {propertyName}
-          {wo.unit && ` · ${wo.unit}`}
+        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-fg-3">
+          <TypeLabel type={wo.type} className="shrink-0 text-fg-3" />
+          <span className="text-fg-4">·</span>
+          <span className="truncate">
+            {propertyName}
+            {wo.unit && ` · ${wo.unit}`}
+          </span>
         </div>
       </td>
-      <td className="px-2.5 py-3">
-        <div className="w-32 truncate text-xs text-fg-2">{stageLabel(wo)}</div>
-        <ProgressBar value={stageProgress(wo)} tone={open ? 'accent' : 'good'} className="mt-1.5 w-32" />
+      <td className="px-3 py-3 align-top">
+        <StageMeter wo={wo} className="w-36" />
       </td>
-      <td className="px-2.5 py-3">
-        <AssigneeChip tech={tech} className="max-w-[140px]" />
+      <td className="px-3 py-3 align-top whitespace-nowrap">
+        <SlaBadge wo={wo} now={now} className="mt-px" />
       </td>
-      <td className="py-3 pr-4 pl-2.5 whitespace-nowrap 2xl:pr-2.5">
-        <SlaBadge wo={wo} now={now} />
+      <td className="px-3 py-3 align-top">
+        <AssigneeChip tech={tech} className="max-w-40" />
       </td>
-      <td className="hidden py-3 pr-4 pl-2.5 text-right text-xs whitespace-nowrap text-fg-3 tabular 2xl:table-cell">{timeAgo(wo.createdAt, now)}</td>
+      <td className="hidden py-3 pr-5 pl-3 text-right align-top text-xs leading-5 whitespace-nowrap text-fg-3 tabular xl:table-cell">{timeAgo(wo.createdAt, now)}</td>
     </tr>
   )
 }
 
-function WorkOrderCard({ wo, now, propertyName, tech, selected, onOpen }: { wo: WorkOrder; now: number; propertyName: string; tech: Technician | undefined; selected: boolean; onOpen: (id: string) => void }) {
+function WorkOrderListItem({ wo, now, propertyName, tech, selected, onOpen }: RowProps) {
   const open = isOpen(wo)
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(wo.id)}
-      className={cn(
-        'relative w-full overflow-hidden rounded-xl border bg-surface p-4 text-left transition hover:border-border-strong',
-        selected ? 'border-accent-line' : open && wo.priority === 'P1' ? 'border-critical-line' : 'border-border',
-      )}
-    >
-      {open && wo.priority === 'P1' && <span className="absolute inset-y-0 left-0 w-1 bg-critical" />}
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-xs text-fg-3">{wo.number}</span>
-        <PriorityBadge priority={wo.priority} />
-        <TypeBadge type={wo.type} short className="min-w-0" />
-        <span className="ml-auto shrink-0 text-[11px] text-fg-3">{timeAgo(wo.createdAt, now)}</span>
-      </div>
-      <div className={cn('mt-2 text-sm font-medium', open ? 'text-fg' : 'text-fg-2')}>{wo.title}</div>
-      <div className="mt-0.5 truncate text-xs text-fg-3">
-        {propertyName}
-        {wo.unit && ` · ${wo.unit}`}
-      </div>
-      <div className="mt-3 flex items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[11px] text-fg-3">{stageLabel(wo)}</div>
-          <ProgressBar value={stageProgress(wo)} tone={open ? 'accent' : 'good'} className="mt-1" />
+    <li>
+      <button type="button" onClick={() => onOpen(wo.id)} className={cn('flex w-full flex-col gap-2 px-4 py-3.5 text-left transition-colors hover:bg-surface-2', selected && 'bg-accent-soft hover:bg-accent-soft')}>
+        <div className="flex w-full items-center gap-2">
+          <PriorityBadge priority={wo.priority} />
+          <span className="font-mono text-xs text-fg-3">{wo.number}</span>
+          <SlaBadge wo={wo} now={now} className="ml-auto" />
         </div>
-        <SlaBadge wo={wo} now={now} />
-      </div>
-      <div className="mt-3 border-t border-border pt-3">
-        <AssigneeChip tech={tech} />
-      </div>
-    </button>
+        <div className="w-full min-w-0">
+          <div className={cn('text-[13px] leading-5 font-medium', open ? 'text-fg' : 'text-fg-2')}>{wo.title}</div>
+          <div className="mt-0.5 truncate text-xs text-fg-3">
+            {WO_TYPE_SHORT[wo.type]} · {propertyName}
+            {wo.unit && ` · ${wo.unit}`}
+          </div>
+        </div>
+        <div className="flex w-full items-center gap-4">
+          <StageMeter wo={wo} className="min-w-0 flex-1" />
+          <AssigneeChip tech={tech} showName={false} />
+        </div>
+      </button>
+    </li>
   )
 }
 
@@ -192,117 +171,111 @@ export default function OpsWorkOrders() {
 
   const typeOptions: SegmentOption<TypeFilter>[] = [
     { value: 'all', label: 'All', count: openByType.all },
-    ...WO_TYPE_ORDER.map((t) => ({ value: t, label: WO_TYPE_SHORT[t], icon: WO_TYPE_ICON[t], count: openByType[t] })),
+    ...WO_TYPE_ORDER.map((t) => ({ value: t, label: WO_TYPE_SHORT[t], count: openByType[t] })),
   ]
-  const statusOptions: SegmentOption<StatusFilter>[] = [
-    { value: 'open', label: 'Open', count: byStatus.open },
-    { value: 'closed', label: 'Closed', count: byStatus.closed },
-    { value: 'all', label: 'All', count: byStatus.all },
-  ]
+
+  const clearFilters = () => {
+    setType('all')
+    setStatus('all')
+    setQuery('')
+  }
+
+  const rowProps = (w: WorkOrder): RowProps => ({
+    wo: w,
+    now,
+    propertyName: propertyNames.get(w.propertyId) ?? w.propertyId,
+    tech: w.assigneeId ? techById.get(w.assigneeId) : undefined,
+    selected: w.id === selectedId,
+    onOpen: openDrawer,
+  })
 
   return (
     <>
       <PageHeader
-        eyebrow="Dispatch"
         title="Work orders"
         subtitle={`Trouble calls, emergency repairs, installs, maintenance and resident support for ${partner.name}`}
         actions={
-          <Button variant="primary" size="md" icon={Plus} onClick={() => setCreating(true)}>
+          <Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>
             New work order
           </Button>
         }
       />
 
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-        <Metric label="Open work orders" value={openOrders.length} icon={ClipboardList} tone="accent" hint={`${openByType.emergency + openByType.trouble} field repairs`} />
-        <Metric label="P1 emergencies" value={p1} icon={Siren} tone={p1 ? 'critical' : 'neutral'} hint={p1 ? 'Crew dispatched' : 'None active'} />
-        <Metric label="SLA at risk" value={atRisk} icon={atRisk ? OctagonAlert : Clock} tone={atRisk ? 'warning' : 'good'} hint="At risk or breached" />
-        <Metric label="Unassigned" value={unassigned} icon={UserRound} tone={unassigned ? 'warning' : 'neutral'} hint="Awaiting dispatch" />
-        <Metric label="Closed · 24h" value={closed24h} icon={CircleCheck} tone="good" hint="All work types" className="col-span-2 sm:col-span-1" />
+      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+        <Stat label="Open work orders" value={openOrders.length} hint={`${openByType.emergency + openByType.trouble} field repairs`} />
+        <Stat label="P1 emergencies" value={p1} tone={p1 ? 'critical' : 'neutral'} hint={p1 ? 'Crew dispatched' : 'None active'} />
+        <Stat label="SLA at risk" value={atRisk} tone={atRisk ? 'warning' : 'neutral'} hint="At risk or breached" />
+        <Stat label="Unassigned" value={unassigned} tone={unassigned ? 'warning' : 'neutral'} hint="Awaiting dispatch" />
+        <Stat label="Closed in 24h" value={closed24h} hint="All work types" className="col-span-2 md:col-span-1" />
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Segmented size="sm" options={typeOptions} value={type} onChange={setType} />
-        <Segmented size="sm" options={statusOptions} value={status} onChange={setStatus} />
-        <div className="relative w-full sm:ml-auto sm:w-64">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-fg-3" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search number, title, unit, property" className="h-9 pl-9" aria-label="Search work orders" />
+      <Card padded={false} className="overflow-hidden">
+        <div className="flex flex-col gap-3 px-4 py-3 sm:px-5 lg:flex-row lg:items-center">
+          <Segmented size="sm" options={typeOptions} value={type} onChange={setType} className="self-start" />
+          <div className="flex gap-2 lg:ml-auto">
+            <Select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)} aria-label="Status" className="h-8 w-36 shrink-0 text-[13px]">
+              <option value="open">Open · {byStatus.open}</option>
+              <option value="closed">Closed · {byStatus.closed}</option>
+              <option value="all">All · {byStatus.all}</option>
+            </Select>
+            <div className="relative min-w-0 flex-1 lg:w-64 lg:flex-none">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-fg-4" />
+              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search number, title, unit" className="h-8 pl-8 text-[13px]" aria-label="Search work orders" />
+            </div>
+          </div>
         </div>
-      </div>
 
-      {filtered.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon={ClipboardList}
-            title="No work orders match"
-            message="Try a different type, status or search term."
-            action={
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  setType('all')
-                  setStatus('all')
-                  setQuery('')
-                }}
-              >
-                Clear filters
-              </Button>
-            }
-          />
-        </Card>
-      ) : (
-        <>
-          <Card padded={false} className="hidden overflow-hidden md:block">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] text-left text-sm">
-                <thead className="border-b border-border bg-black/10 text-[11px] tracking-wider text-fg-3 uppercase">
-                  <tr>
-                    <th className="py-2.5 pr-2.5 pl-4 font-medium">Number</th>
-                    <th className="px-2.5 py-2.5 font-medium">Priority</th>
-                    <th className="px-2.5 py-2.5 font-medium">Type</th>
-                    <th className="px-2.5 py-2.5 font-medium">Work order</th>
-                    <th className="px-2.5 py-2.5 font-medium">Stage</th>
-                    <th className="px-2.5 py-2.5 font-medium">Assignee</th>
-                    <th className="py-2.5 pr-4 pl-2.5 font-medium 2xl:pr-2.5">SLA</th>
-                    <th className="hidden py-2.5 pr-4 pl-2.5 text-right font-medium 2xl:table-cell">Created</th>
+        {filtered.length === 0 ? (
+          <div className="border-t border-border">
+            <EmptyState
+              icon={ClipboardList}
+              title="No work orders match"
+              message="Try a different type, status or search term."
+              action={
+                <Button size="sm" variant="secondary" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              }
+            />
+          </div>
+        ) : (
+          <>
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[820px] text-[13px]">
+                <thead>
+                  <tr className="border-y border-border bg-surface-2 text-left text-xs text-fg-3">
+                    <th className="py-2 pr-2 pl-5 font-medium">
+                      <span className="sr-only">Priority</span>
+                    </th>
+                    <th className="px-3 py-2 font-medium">Number</th>
+                    <th className="px-3 py-2 font-medium">Work order</th>
+                    <th className="px-3 py-2 font-medium">Stage</th>
+                    <th className="px-3 py-2 font-medium">SLA</th>
+                    <th className="px-3 py-2 font-medium">Assignee</th>
+                    <th className="hidden py-2 pr-5 pl-3 text-right font-medium xl:table-cell">Created</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {filtered.map((w) => (
-                    <WorkOrderRow
-                      key={w.id}
-                      wo={w}
-                      now={now}
-                      propertyName={propertyNames.get(w.propertyId) ?? w.propertyId}
-                      tech={w.assigneeId ? techById.get(w.assigneeId) : undefined}
-                      selected={w.id === selectedId}
-                      onOpen={openDrawer}
-                    />
+                    <WorkOrderRow key={w.id} {...rowProps(w)} />
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="border-t border-border px-4 py-2.5 text-[11px] text-fg-3">
-              {filtered.length} work order{filtered.length === 1 ? '' : 's'} · open first, P1 first, then by SLA due time
+            <ul className="divide-y divide-border border-t border-border md:hidden">
+              {filtered.map((w) => (
+                <WorkOrderListItem key={w.id} {...rowProps(w)} />
+              ))}
+            </ul>
+            <div className="flex items-center justify-between gap-3 border-t border-border bg-surface-2 px-4 py-2.5 text-xs text-fg-3 sm:px-5">
+              <span className="tabular">
+                {filtered.length} work order{filtered.length === 1 ? '' : 's'}
+              </span>
+              <span className="hidden sm:inline">Sorted by status, priority and SLA due time</span>
             </div>
-          </Card>
-
-          <div className="flex flex-col gap-2.5 md:hidden">
-            {filtered.map((w) => (
-              <WorkOrderCard
-                key={w.id}
-                wo={w}
-                now={now}
-                propertyName={propertyNames.get(w.propertyId) ?? w.propertyId}
-                tech={w.assigneeId ? techById.get(w.assigneeId) : undefined}
-                selected={w.id === selectedId}
-                onOpen={openDrawer}
-              />
-            ))}
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </Card>
 
       <WoCreateModal
         open={creating}

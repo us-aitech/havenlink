@@ -1,19 +1,25 @@
-import { Circle, VideoOff } from 'lucide-react'
+import { VideoOff } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatClock, timeAgo } from '@/lib/format'
 import { useNow } from '@/lib/hooks'
 import type { Camera } from '@/types'
 
-const SCENES: Record<string, { sky: string; ground: string; shape: 'door' | 'driveway' | 'pool' | 'room' }> = {
-  'c-doorbell': { sky: 'from-sky-900/60 via-slate-800 to-slate-900', ground: '#1e293b', shape: 'door' },
-  'c-driveway': { sky: 'from-indigo-900/50 via-slate-800 to-zinc-900', ground: '#27272a', shape: 'driveway' },
-  'c-backyard': { sky: 'from-cyan-900/50 via-slate-800 to-slate-900', ground: '#0f2a2e', shape: 'pool' },
-  'c-living': { sky: 'from-amber-900/30 via-stone-800 to-zinc-900', ground: '#292524', shape: 'room' },
+type Shape = 'door' | 'driveway' | 'pool' | 'room'
+
+const SCENES: Record<string, { sky: string; ground: string; shape: Shape }> = {
+  'c-doorbell': { sky: 'linear-gradient(180deg, #16324a 0%, #1f2937 55%, #111827 100%)', ground: '#1e293b', shape: 'door' },
+  'c-driveway': { sky: 'linear-gradient(180deg, #232150 0%, #1f2937 55%, #18181b 100%)', ground: '#27272a', shape: 'driveway' },
+  'c-backyard': { sky: 'linear-gradient(180deg, #123a44 0%, #1f2937 55%, #111827 100%)', ground: '#0f2a2e', shape: 'pool' },
+  'c-living': { sky: 'linear-gradient(180deg, #3a2a1a 0%, #292524 55%, #18181b 100%)', ground: '#292524', shape: 'room' },
 }
 
-function SceneArt({ shape, ground }: { shape: string; ground: string }) {
+const SCANLINES = 'repeating-linear-gradient(0deg, rgb(255 255 255 / 0.025) 0px, rgb(255 255 255 / 0.025) 1px, transparent 1px, transparent 3px)'
+const CHIP = { background: 'rgb(0 0 0 / 0.45)' }
+const FOOTER_SHADE = { background: 'linear-gradient(to top, rgb(0 0 0 / 0.72), rgb(0 0 0 / 0))' }
+
+function SceneArt({ shape, ground }: { shape: Shape; ground: string }) {
   return (
-    <svg viewBox="0 0 160 90" className="absolute inset-0 size-full" preserveAspectRatio="xMidYMid slice">
+    <svg viewBox="0 0 160 90" className="absolute inset-0 size-full" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
       <rect x="0" y="58" width="160" height="32" fill={ground} />
       {shape === 'door' && (
         <g opacity="0.8">
@@ -63,39 +69,45 @@ export function CameraTile({ camera, className, alarm }: { camera: Camera; class
   const now = useNow(1000)
   const scene = SCENES[camera.id] ?? SCENES['c-living']
   const recentMotion = camera.lastMotionAt !== null && now - camera.lastMotionAt < 20_000
+
+  if (!camera.online) {
+    return (
+      <div className={cn('flex aspect-video flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-surface-2 text-fg-3', className)}>
+        <VideoOff className="size-5" />
+        <span className="text-xs">{camera.name} is offline</span>
+      </div>
+    )
+  }
+
   return (
-    <div className={cn('group relative aspect-video overflow-hidden rounded-xl border border-line bg-gradient-to-b', scene.sky, alarm && 'border-rose-500/60', className)}>
-      {camera.online ? (
-        <>
-          <SceneArt shape={scene.shape} ground={scene.ground} />
-          <div className="absolute inset-0 bg-[repeating-linear-gradient(0deg,rgba(255,255,255,0.025)_0px,rgba(255,255,255,0.025)_1px,transparent_1px,transparent_3px)]" />
-          {recentMotion && <div className="absolute top-1/3 left-1/2 h-1/2 w-1/5 -translate-x-1/2 rounded border-2 border-amber-300/80" />}
-          <div className="absolute inset-x-0 top-0 flex items-center justify-between p-2">
-            <span className="inline-flex items-center gap-1 rounded-md bg-black/50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white backdrop-blur">
-              <span className="size-1.5 animate-pulse rounded-full bg-rose-500" />
-              LIVE
-            </span>
-            {camera.recording && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-black/50 px-1.5 py-0.5 text-[10px] font-medium text-rose-200 backdrop-blur">
-                <Circle className="size-2 fill-rose-500 text-rose-500" />
-                REC
-              </span>
-            )}
-          </div>
-          <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/70 to-transparent p-2 pt-6">
-            <div>
-              <div className="text-xs font-medium text-white">{camera.name}</div>
-              <div className="text-[10px] text-zinc-300">{recentMotion ? 'Motion detected' : `Motion ${timeAgo(camera.lastMotionAt, now)}`}</div>
-            </div>
-            <span className="font-mono text-[10px] text-zinc-300">{formatClock(now)}</span>
-          </div>
-        </>
-      ) : (
-        <div className="flex size-full flex-col items-center justify-center gap-1 text-zinc-500">
-          <VideoOff className="size-5" />
-          <span className="text-xs">{camera.name} offline</span>
+    <div
+      className={cn('relative isolate aspect-video overflow-hidden rounded-lg border', alarm ? 'border-critical ring-1 ring-critical-line' : 'border-border', className)}
+      style={{ background: scene.sky }}
+      role="img"
+      aria-label={`${camera.name} camera, live${camera.recording ? ', recording' : ''}${recentMotion ? ', motion detected' : ''}`}
+    >
+      <SceneArt shape={scene.shape} ground={scene.ground} />
+      <div className="absolute inset-0" style={{ background: SCANLINES }} />
+      {recentMotion && <div className="absolute top-1/3 left-1/2 h-1/2 w-1/5 -translate-x-1/2 rounded-sm border-2 border-warning" />}
+      <div className="absolute inset-x-0 top-0 flex items-center justify-between p-2">
+        <span className="inline-flex h-5 items-center gap-1.5 rounded-md px-1.5 text-[11px] font-medium text-white backdrop-blur-sm" style={CHIP}>
+          <span className="size-1.5 animate-pulse rounded-full bg-critical" />
+          Live
+        </span>
+        {camera.recording && (
+          <span className="inline-flex h-5 items-center gap-1.5 rounded-md px-1.5 text-[11px] font-medium text-white backdrop-blur-sm" style={CHIP}>
+            <span className="size-1.5 rounded-full bg-critical" />
+            Rec
+          </span>
+        )}
+      </div>
+      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 px-2.5 pt-8 pb-2" style={FOOTER_SHADE}>
+        <div className="min-w-0">
+          <div className="truncate text-[13px] leading-5 font-medium text-white">{camera.name}</div>
+          <div className="truncate text-[11px] leading-4 text-white opacity-75">{recentMotion ? 'Motion detected' : `Motion ${timeAgo(camera.lastMotionAt, now)}`}</div>
         </div>
-      )}
+        <span className="shrink-0 text-[11px] leading-4 text-white opacity-75 tabular">{formatClock(now)}</span>
+      </div>
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { CalendarPlus, Info } from 'lucide-react'
+import { CalendarPlus } from 'lucide-react'
 import { Button, Field, Input, Modal, Select, Textarea } from '@/components/ui'
 import { currency } from '@/lib/format'
 import { useNow } from '@/lib/hooks'
@@ -78,8 +78,6 @@ export function InstScheduleModal({ onClose, initialPackage = 'Secure' }: { onCl
       onClose={onClose}
       title="Schedule smart-home install"
       subtitle="Books the resident visit and opens an install work order."
-      icon={CalendarPlus}
-      tone="accent"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -142,12 +140,17 @@ export function InstScheduleModal({ onClose, initialPackage = 'Secure' }: { onCl
         <Field label="Notes for the technician" hint="Optional — a scope description is generated from the package if left blank.">
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Access instructions, pets, preferred mount locations…" className="min-h-20!" />
         </Field>
-        <div className="flex gap-3 rounded-xl bg-surface-2 p-3 text-xs text-fg-3 ring-1 ring-inset ring-border">
-          <Info className="mt-0.5 size-4 shrink-0 text-accent-fg" />
-          <div>
-            <span className="font-medium text-fg">{pkg}</span>: {def.builds ? `everything in ${def.builds} plus ` : ''}
-            {def.items.join(', ').toLowerCase()}. Bills {currency(def.install)} on close; resident pays {monthlyPrice(def.monthly)}/mo. Workflow: resident scheduled → in-unit installation → WiFi optimization → app onboarding → ticket closed.
+        <div className="rounded-lg bg-surface-2 p-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <span className="text-[13px] font-medium text-fg">{pkg} package</span>
+            <span className="text-xs text-fg-2 tabular">
+              {currency(def.install)} install · {monthlyPrice(def.monthly)}/mo
+            </span>
           </div>
+          <p className="mt-1 text-xs leading-5 text-fg-3">
+            {def.builds ? `Everything in ${def.builds}, plus ` : ''}
+            {def.builds ? def.items.join(', ').toLowerCase() : def.items.join(', ')}. The install fee bills when the ticket closes.
+          </p>
         </div>
       </form>
     </Modal>

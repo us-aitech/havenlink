@@ -1,21 +1,13 @@
 import type { KeyboardEvent } from 'react'
-import { ChevronRight, ClipboardList, House, MapPin, UserRound } from 'lucide-react'
 import { Badge, ProgressBar, StatusDot, type Tone } from '@/components/ui'
 import { currency, num, pct } from '@/lib/format'
-import type { Property, PropertyType } from '@/types'
-import { PACKAGE_TONE } from './InstPackages'
+import type { Property } from '@/types'
 
 export interface PropertyStats {
   onts: number
   online: number
   openWorkOrders: number
   p1: number
-}
-
-export const PROPERTY_TYPE_TONE: Record<PropertyType, Tone> = {
-  MDU: 'info',
-  'SFH Community': 'accent',
-  Commercial: 'neutral',
 }
 
 export const DEMO_PROPERTY = 'p-palm-cove'
@@ -32,98 +24,94 @@ export function onlineLabel(ratio: number): string {
   return 'Outage'
 }
 
-export function PropCard({ property, stats, onOpen }: { property: Property; stats: PropertyStats; onOpen: () => void }) {
-  const onlineRatio = stats.onts ? stats.online / stats.onts : 0
-  const adoption = property.units ? property.smartHomeUnits / property.units : 0
-  const tone = onlineTone(onlineRatio)
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+export function onlinePct(stats: PropertyStats): string {
+  const ratio = stats.onts ? stats.online / stats.onts : 0
+  return pct(ratio, ratio < 1 ? 1 : 0)
+}
+
+export function activateOnKey(action: () => void) {
+  return (e: KeyboardEvent<HTMLElement>) => {
+    if (e.target !== e.currentTarget) return
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
-      onOpen()
+      action()
     }
   }
+}
+
+export function OnlineValue({ stats }: { stats: PropertyStats }) {
+  const ratio = stats.onts ? stats.online / stats.onts : 0
+  const tone = onlineTone(ratio)
+  return (
+    <span className="inline-flex items-center gap-1.5" title={`${stats.online} of ${stats.onts} ONTs online · ${onlineLabel(ratio)}`}>
+      <StatusDot tone={tone} pulse={tone === 'critical'} />
+      <span className="tabular">{onlinePct(stats)}</span>
+      <span className="sr-only">{onlineLabel(ratio)}</span>
+    </span>
+  )
+}
+
+export function PropCard({ property, stats, onOpen }: { property: Property; stats: PropertyStats; onOpen: () => void }) {
+  const adoption = property.units ? property.smartHomeUnits / property.units : 0
 
   return (
     <div
       role="button"
       tabIndex={0}
       onClick={onOpen}
-      onKeyDown={onKeyDown}
+      onKeyDown={activateOnKey(onOpen)}
       aria-label={`Open ${property.name}`}
-      className="group flex cursor-pointer flex-col rounded-xl border border-border bg-surface p-5 transition outline-none hover:border-border-strong hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-accent-line"
+      className="flex min-w-0 cursor-pointer flex-col rounded-xl border border-border bg-surface p-5 shadow-xs transition-[border-color,box-shadow] hover:border-border-strong hover:shadow-sm"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="truncate text-sm font-semibold text-fg">{property.name}</h3>
-          <div className="mt-1 flex items-center gap-1 text-xs text-fg-3">
-            <MapPin className="size-3 shrink-0" />
-            <span className="truncate">{property.city}</span>
+          <div className="mt-0.5 flex min-w-0 items-center gap-2">
+            <p className="truncate text-[13px] text-fg-3">{property.city}</p>
+            {property.id === DEMO_PROPERTY && <Badge tone="accent">Demo home</Badge>}
           </div>
         </div>
-        <Badge tone={PROPERTY_TYPE_TONE[property.type]}>{property.type}</Badge>
+        <Badge className="shrink-0">{property.type}</Badge>
       </div>
-      {property.id === DEMO_PROPERTY && (
-        <div className="mt-3">
-          <Badge tone="accent" icon={House}>
-            Demo home inside
-          </Badge>
-        </div>
-      )}
 
-      <dl className="mt-4 grid grid-cols-3 gap-2">
-        <div className="rounded-xl bg-surface-2 px-3 py-2 ring-1 ring-inset ring-border">
-          <dt className="text-[11px] text-fg-3">Units</dt>
-          <dd className="mt-0.5 text-base font-semibold text-fg">{num(property.units)}</dd>
+      <dl className="mt-5 grid grid-cols-3 gap-4">
+        <div className="min-w-0">
+          <dt className="text-xs text-fg-3">Units</dt>
+          <dd className="mt-0.5 text-base font-semibold text-fg tabular">{num(property.units)}</dd>
         </div>
-        <div className="rounded-xl bg-surface-2 px-3 py-2 ring-1 ring-inset ring-border" title={`${stats.online} of ${stats.onts} ONTs online · ${onlineLabel(onlineRatio)}`}>
-          <dt className="text-[11px] text-fg-3">ONTs online</dt>
-          <dd className="mt-0.5 flex items-center gap-1.5 text-base font-semibold text-fg">
-            <StatusDot tone={tone} pulse={tone === 'critical'} />
-            {pct(onlineRatio, onlineRatio < 1 ? 1 : 0)}
+        <div className="min-w-0">
+          <dt className="text-xs text-fg-3">ONTs online</dt>
+          <dd className="mt-0.5 text-base font-semibold text-fg">
+            <OnlineValue stats={stats} />
           </dd>
         </div>
-        <div className="rounded-xl bg-surface-2 px-3 py-2 ring-1 ring-inset ring-border">
-          <dt className="text-[11px] text-fg-3">Open WOs</dt>
-          <dd className="mt-0.5 flex items-center gap-1.5 text-base font-semibold text-fg">
-            <ClipboardList className="size-3.5 text-fg-3" />
+        <div className="min-w-0">
+          <dt className="text-xs text-fg-3">Open WOs</dt>
+          <dd className="mt-0.5 flex items-center gap-1.5 text-base font-semibold text-fg tabular">
             {stats.openWorkOrders}
-            {stats.p1 > 0 && <span className="rounded bg-critical px-1 text-[10px] font-semibold text-white">P1</span>}
+            {stats.p1 > 0 && <Badge tone="critical">P1</Badge>}
           </dd>
         </div>
       </dl>
 
-      <div className="mt-4">
+      <div className="mt-5">
         <div className="mb-1.5 flex items-baseline justify-between gap-2 text-xs">
           <span className="text-fg-3">Smart-home adoption</span>
-          <span className="text-fg-2 tabular">
-            <span className="font-semibold text-fg">{pct(adoption)}</span> · {property.smartHomeUnits}/{property.units}
+          <span className="text-fg-3 tabular">
+            <span className="font-medium text-fg">{pct(adoption)}</span> · {property.smartHomeUnits} of {property.units}
           </span>
         </div>
         <ProgressBar value={adoption} />
       </div>
 
-      <div className="mt-4 flex flex-col gap-1.5 border-t border-border pt-3 text-xs">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-fg-3">Package</span>
-          <Badge tone={PACKAGE_TONE[property.package]}>{property.package}</Badge>
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-fg-3">Contract</span>
-          <span className="text-fg">
-            {property.contract} · <span className="tabular">{currency(property.monthlyContract)}</span>/mo
-          </span>
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-fg-3">Manager</span>
-          <span className="inline-flex min-w-0 items-center gap-1 text-fg">
-            <UserRound className="size-3 shrink-0 text-fg-3" />
-            <span className="truncate">{property.manager}</span>
-          </span>
-        </div>
-      </div>
-      <div className="mt-4 flex items-center justify-end gap-1 text-xs font-medium text-fg-3 transition group-hover:text-accent-fg">
-        View property
-        <ChevronRight className="size-3.5" />
+      <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4 text-[13px]">
+        <span className="min-w-0 truncate text-fg-3">
+          {property.contract} contract · {property.package}
+        </span>
+        <span className="shrink-0 font-semibold text-fg tabular">
+          {currency(property.monthlyContract)}
+          <span className="font-normal text-fg-3">/mo</span>
+        </span>
       </div>
     </div>
   )

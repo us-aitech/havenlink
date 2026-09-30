@@ -1,16 +1,15 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { Check, ChevronRight, ClipboardList, House, MapPin, Network, Search, Server, UserRound } from 'lucide-react'
-import { Badge, Drawer, EmptyState, Input, ProgressBar, SectionTitle, StatusDot, TONE_DOT } from '@/components/ui'
+import { Check, ChevronRight, ClipboardList, Search, Server } from 'lucide-react'
+import { Badge, Drawer, EmptyState, Input, KeyValue, ProgressBar, StatusDot, TONE_DOT } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { currency, num, pct, timeAgo } from '@/lib/format'
 import { useNow } from '@/lib/hooks'
-import { ONT_STATUS_LABEL, ONT_STATUS_TONE, PRIORITY_TONE, WORK_ORDER_TYPE_LABEL, WORK_ORDER_TYPE_TONE, isOpen, stageLabel } from '@/lib/workflows'
+import { ONT_STATUS_LABEL, ONT_STATUS_TONE, PRIORITY_TONE, WORK_ORDER_TYPE_LABEL, isOpen, stageLabel } from '@/lib/workflows'
 import { useStore } from '@/store/useStore'
 import type { OntStatus, Property } from '@/types'
-import { PACKAGE_TONE } from './InstPackages'
 import { ASSET_KIND_ICON, ASSET_KIND_LABEL, AssigneeChip, ConditionBadge, workOrderHref } from './MntShared'
-import { DEMO_PROPERTY, PROPERTY_TYPE_TONE } from './PropCard'
+import { DEMO_PROPERTY } from './PropCard'
 
 const STATUS_ORDER: OntStatus[] = ['online', 'degraded', 'los', 'offline']
 const MAX_ROWS = 150
@@ -18,6 +17,18 @@ const MAX_ROWS = 150
 function signedDbm(value: number | null): string {
   if (value === null) return 'No light'
   return `${value < 0 ? '−' : ''}${Math.abs(value).toFixed(1)}`
+}
+
+function Section({ title, meta, children }: { title: string; meta?: ReactNode; children: ReactNode }) {
+  return (
+    <section>
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h3 className="text-sm font-semibold text-fg">{title}</h3>
+        {meta && <span className="text-xs text-fg-3 tabular">{meta}</span>}
+      </div>
+      {children}
+    </section>
+  )
 }
 
 function PropDrawerBody({ property }: { property: Property }) {
@@ -54,159 +65,130 @@ function PropDrawerBody({ property }: { property: Property }) {
   const rows = filtered.slice(0, MAX_ROWS)
 
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-col gap-8">
       <section>
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge tone={PROPERTY_TYPE_TONE[property.type]}>{property.type}</Badge>
-          <Badge tone={property.contract === 'Bulk' ? 'good' : 'neutral'}>{property.contract} contract</Badge>
-          <Badge tone={PACKAGE_TONE[property.package]}>{property.package} package</Badge>
-          {property.id === DEMO_PROPERTY && (
-            <Badge tone="accent" icon={House}>
-              Demo home inside
-            </Badge>
-          )}
+          <Badge>{property.contract} contract</Badge>
+          <Badge>{property.package} package</Badge>
+          {property.id === DEMO_PROPERTY && <Badge tone="accent">Demo home inside</Badge>}
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-4">
           {[
             { label: 'Units', value: num(property.units) },
-            { label: 'Smart-home', value: `${property.smartHomeUnits}` },
-            { label: 'Contract', value: `${currency(property.monthlyContract)}/mo` },
-            { label: 'Open WOs', value: `${openOrders.length}` },
+            { label: 'Smart-home units', value: num(property.smartHomeUnits) },
+            { label: 'Contract value', value: `${currency(property.monthlyContract)}/mo` },
+            { label: 'Open work orders', value: num(openOrders.length) },
           ].map((s) => (
-            <div key={s.label} className="rounded-xl bg-surface-2 px-3 py-2.5 ring-1 ring-inset ring-border">
-              <div className="text-[11px] text-fg-3">{s.label}</div>
-              <div className="mt-0.5 text-base font-semibold text-fg">{s.value}</div>
+            <div key={s.label} className="min-w-0">
+              <dt className="text-xs text-fg-3">{s.label}</dt>
+              <dd className="mt-0.5 text-base font-semibold text-fg tabular">{s.value}</dd>
             </div>
           ))}
-        </div>
-        <div className="mt-4">
+        </dl>
+        <div className="mt-5">
           <div className="mb-1.5 flex items-baseline justify-between text-xs">
             <span className="text-fg-3">Smart-home adoption</span>
-            <span className="text-fg-2 tabular">
-              <span className="font-semibold text-fg">{pct(adoption)}</span> · {property.smartHomeUnits}/{property.units} units
+            <span className="text-fg-3 tabular">
+              <span className="font-medium text-fg">{pct(adoption)}</span> · {property.smartHomeUnits} of {property.units} units
             </span>
           </div>
           <ProgressBar value={adoption} />
         </div>
-        <div className="mt-4 flex flex-col gap-1.5 text-xs text-fg-3">
-          <span className="inline-flex items-center gap-1.5">
-            <UserRound className="size-3.5 text-fg-3" />
-            {property.manager}
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <MapPin className="size-3.5 text-fg-3" />
-            {property.address}, {property.city}
-          </span>
+        <div className="mt-4 divide-y divide-border border-y border-border">
+          <KeyValue label="Property manager" value={property.manager} />
+          <KeyValue label="Address" value={`${property.address}, ${property.city}`} />
         </div>
       </section>
 
-      <section>
-        <SectionTitle>GPON network</SectionTitle>
-        <div className="rounded-xl border border-border bg-surface-2 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex min-w-0 items-start gap-3">
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-fg-2 ring-1 ring-border">
-                <Network className="size-4" />
+      <Section title="GPON network" meta={`${onts.length} ONTs`}>
+        <div className="divide-y divide-border border-y border-border">
+          <KeyValue
+            label="OLT"
+            value={
+              <span className="flex flex-col items-end">
+                <span className="font-mono text-xs font-normal">{olt?.name ?? property.oltId}</span>
+                {olt && <span className="text-xs font-normal text-fg-3">{olt.location}</span>}
               </span>
-              <div className="min-w-0">
-                <div className="font-mono text-sm text-fg">{olt?.name ?? property.oltId}</div>
-                <div className="truncate text-xs text-fg-3">{olt?.location ?? '—'}</div>
-              </div>
-            </div>
-            {olt && (
-              <span className="shrink-0 text-xs text-fg-3 tabular">
-                {olt.usedPorts}/{olt.ponPorts} PON ports
-              </span>
+            }
+          />
+          {olt && <KeyValue label="PON ports in use" value={<span className="tabular">{`${olt.usedPorts} of ${olt.ponPorts}`}</span>} />}
+          <KeyValue label="Splitters" value={<span className="tabular">{`${primary.length} × 1:4 primary · ${secondary.length} × 1:8 secondary`}</span>} />
+          <KeyValue label="Average Rx power" value={<span className="font-mono text-xs font-normal tabular">{avgRx === null ? '—' : `${signedDbm(avgRx)} dBm`}</span>} />
+        </div>
+        <div className="mt-4">
+          <div className="mb-2 text-xs text-fg-3">ONT status</div>
+          <div className="flex h-2 w-full gap-0.5 overflow-hidden rounded-full bg-surface-3" aria-hidden>
+            {STATUS_ORDER.map((status) =>
+              statusCounts[status] > 0 ? (
+                <span key={status} className={cn('h-full', TONE_DOT[ONT_STATUS_TONE[status]])} style={{ width: `${(statusCounts[status] / Math.max(1, onts.length)) * 100}%` }} />
+              ) : null,
             )}
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-lg bg-surface-2 px-3 py-2">
-              <div className="text-fg-3">Primary splitters</div>
-              <div className="mt-0.5 text-fg">
-                <span className="font-semibold tabular">{primary.length}</span> × 1:4
-              </div>
-            </div>
-            <div className="rounded-lg bg-surface-2 px-3 py-2">
-              <div className="text-fg-3">Secondary splitters</div>
-              <div className="mt-0.5 text-fg">
-                <span className="font-semibold tabular">{secondary.length}</span> × 1:8
-              </div>
-            </div>
-          </div>
-          <div className="mt-4">
-            <div className="mb-2 flex items-baseline justify-between text-xs">
-              <span className="text-fg-3">ONT status · {onts.length} ONTs</span>
-              <span className="text-fg-3 tabular">Avg Rx {avgRx === null ? '—' : `${signedDbm(avgRx)} dBm`}</span>
-            </div>
-            <div className="flex h-2 w-full gap-0.5 overflow-hidden rounded-full bg-surface-2" aria-hidden>
-              {STATUS_ORDER.map((status) =>
-                statusCounts[status] > 0 ? (
-                  <span key={status} className={cn('h-full', TONE_DOT[ONT_STATUS_TONE[status]])} style={{ width: `${(statusCounts[status] / Math.max(1, onts.length)) * 100}%` }} />
-                ) : null,
-              )}
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {STATUS_ORDER.map((status) => (
-                <div key={status} className="flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2">
-                  <StatusDot tone={ONT_STATUS_TONE[status]} pulse={status === 'los' && statusCounts.los > 0} />
-                  <div className="min-w-0">
-                    <div className="text-[11px] text-fg-3">{ONT_STATUS_LABEL[status]}</div>
-                    <div className="text-sm font-semibold text-fg tabular">{statusCounts[status]}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <ul className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1.5 text-[13px]">
+            {STATUS_ORDER.map((status) => (
+              <li key={status} className="inline-flex items-center gap-2">
+                <StatusDot tone={ONT_STATUS_TONE[status]} pulse={status === 'los' && statusCounts.los > 0} />
+                <span className="text-fg-3">{ONT_STATUS_LABEL[status]}</span>
+                <span className="font-medium text-fg tabular">{statusCounts[status]}</span>
+              </li>
+            ))}
+          </ul>
         </div>
-      </section>
+      </Section>
 
-      <section>
-        <SectionTitle action={<span className="text-[11px] text-fg-3 tabular">{openOrders.length} open</span>}>Open work orders</SectionTitle>
+      <Section title="Open work orders" meta={`${openOrders.length} open`}>
         {openOrders.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border">
+          <div className="rounded-lg border border-dashed border-border-strong">
             <EmptyState icon={ClipboardList} title="No open work orders" message="Everything at this property is closed out." />
           </div>
         ) : (
-          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
             {openOrders.map((wo) => (
               <li key={wo.id}>
-                <Link to={workOrderHref(wo.id)} className="flex items-center gap-3 px-4 py-3 transition hover:bg-surface-3">
+                <Link to={workOrderHref(wo.id)} className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-2">
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-mono text-[11px] text-fg-3">{wo.number}</span>
-                      <Badge tone={PRIORITY_TONE[wo.priority]}>{wo.priority}</Badge>
-                      <Badge tone={WORK_ORDER_TYPE_TONE[wo.type]}>{WORK_ORDER_TYPE_LABEL[wo.type]}</Badge>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-[13px] leading-5 font-medium text-fg">{wo.title}</span>
+                      {wo.priority !== 'P3' && <Badge tone={PRIORITY_TONE[wo.priority]}>{wo.priority}</Badge>}
                     </div>
-                    <div className="mt-1 truncate text-sm text-fg">{wo.title}</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-3">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-fg-3">
+                      <span className="font-mono">{wo.number}</span>
+                      <span aria-hidden className="text-fg-4">
+                        ·
+                      </span>
+                      <span>{WORK_ORDER_TYPE_LABEL[wo.type]}</span>
+                      <span aria-hidden className="text-fg-4">
+                        ·
+                      </span>
                       <span>{stageLabel(wo)}</span>
-                      <AssigneeChip tech={wo.assigneeId ? techById.get(wo.assigneeId) : undefined} />
                     </div>
                   </div>
-                  <ChevronRight className="size-4 shrink-0 text-fg-4" />
+                  <div className="hidden w-36 sm:block">
+                    <AssigneeChip tech={wo.assigneeId ? techById.get(wo.assigneeId) : undefined} />
+                  </div>
+                  <ChevronRight className="size-4 shrink-0 text-fg-4 transition-colors group-hover:text-fg-3" />
                 </Link>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Section>
 
-      <section>
-        <SectionTitle action={<span className="text-[11px] text-fg-3 tabular">{assets.length} assets</span>}>Plant assets</SectionTitle>
+      <Section title="Plant assets" meta={`${assets.length} assets`}>
         {assets.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border">
-            <EmptyState icon={Server} title="No assets registered" />
+          <div className="rounded-lg border border-dashed border-border-strong">
+            <EmptyState icon={Server} title="No assets registered" message="Cabinets and pedestals appear here once surveyed." />
           </div>
         ) : (
-          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
             {assets.map((a) => {
               const Icon = ASSET_KIND_ICON[a.kind]
               return (
                 <li key={a.id} className="flex items-center gap-3 px-4 py-2.5">
                   <Icon className="size-4 shrink-0 text-fg-3" />
                   <div className="min-w-0 flex-1">
-                    <div className="font-mono text-xs text-fg">{a.name}</div>
-                    <div className="text-[11px] text-fg-3">
+                    <div className="font-mono text-xs leading-5 text-fg">{a.name}</div>
+                    <div className="text-xs text-fg-3">
                       {ASSET_KIND_LABEL[a.kind]} · inspected {timeAgo(a.lastInspectedAt, now)}
                     </div>
                   </div>
@@ -216,41 +198,34 @@ function PropDrawerBody({ property }: { property: Property }) {
             })}
           </ul>
         )}
-      </section>
+      </Section>
 
-      <section>
-        <SectionTitle action={<span className="text-[11px] text-fg-3 tabular">{filtered.length === onts.length ? `${onts.length} units` : `${filtered.length} of ${onts.length}`}</span>}>
-          Units
-        </SectionTitle>
+      <Section title="Units" meta={filtered.length === onts.length ? `${onts.length} units` : `${filtered.length} of ${onts.length}`}>
         <div className="relative mb-3">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-fg-3" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search unit, resident or ONT serial" className="pl-9!" aria-label="Search units" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search unit, resident or ONT serial" className="pl-9" aria-label="Search units" />
         </div>
-        <div className="overflow-hidden rounded-xl border border-border">
+        <div className="overflow-hidden rounded-lg border border-border">
           <div className="relative max-h-[420px] overflow-auto">
-            <table className="w-full min-w-[520px] text-sm">
-              <thead className="sticky top-0 z-10 bg-surface-2">
-                <tr className="text-left text-[11px] tracking-wider text-fg-3 uppercase">
+            <table className="w-full min-w-[520px] text-[13px]">
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b border-border bg-surface-2 text-left text-xs text-fg-3">
                   <th className="px-4 py-2 font-medium">Unit</th>
                   <th className="px-3 py-2 font-medium">Resident</th>
-                  <th className="px-3 py-2 font-medium">ONT</th>
-                  <th className="px-3 py-2 text-right font-medium">Rx dBm</th>
+                  <th className="px-3 py-2 font-medium">ONT status</th>
+                  <th className="px-3 py-2 text-right font-medium">Rx power</th>
                   <th className="px-4 py-2 text-center font-medium">Smart home</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {rows.map((o) => (
-                  <tr key={o.id} className={cn('transition hover:bg-surface-3', o.isDemoHome && 'bg-accent-soft')}>
+                  <tr key={o.id} className={cn('transition-colors', o.isDemoHome ? 'bg-accent-soft' : 'hover:bg-surface-2')}>
                     <td className="px-4 py-2">
                       <div className="flex items-center gap-1.5 whitespace-nowrap text-fg">
                         {o.unit}
-                        {o.isDemoHome && (
-                          <Badge tone="accent" icon={House}>
-                            Demo
-                          </Badge>
-                        )}
+                        {o.isDemoHome && <Badge tone="accent">Demo</Badge>}
                       </div>
-                      <div className="font-mono text-[10px] text-fg-4">{o.serial}</div>
+                      <div className="font-mono text-[11px] text-fg-3">{o.serial}</div>
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap text-fg-2">{o.resident}</td>
                     <td className="px-3 py-2">
@@ -258,10 +233,12 @@ function PropDrawerBody({ property }: { property: Property }) {
                         {ONT_STATUS_LABEL[o.status]}
                       </Badge>
                     </td>
-                    <td className={cn('px-3 py-2 text-right font-mono text-xs tabular', o.rxPowerDbm !== null && o.rxPowerDbm <= -27 ? 'text-warning-fg' : 'text-fg-2')}>{signedDbm(o.rxPowerDbm)}</td>
+                    <td className={cn('px-3 py-2 text-right font-mono text-xs whitespace-nowrap tabular', o.rxPowerDbm !== null && o.rxPowerDbm <= -27 ? 'text-warning-fg' : 'text-fg-2')}>
+                      {o.rxPowerDbm === null ? 'No light' : `${signedDbm(o.rxPowerDbm)} dBm`}
+                    </td>
                     <td className="px-4 py-2 text-center">
                       {o.smartHome ? (
-                        <span className="inline-flex items-center justify-center text-good-fg" title="Smart-home installed">
+                        <span className="inline-flex items-center justify-center text-fg-2" title="Smart home installed">
                           <Check className="size-4" />
                           <span className="sr-only">Yes</span>
                         </span>
@@ -277,9 +254,9 @@ function PropDrawerBody({ property }: { property: Property }) {
             </table>
             {rows.length === 0 && <EmptyState icon={Search} title="No units match" message={`Nothing matches “${query.trim()}”.`} />}
           </div>
-          {filtered.length > rows.length && <div className="border-t border-border px-4 py-2 text-[11px] text-fg-3">Showing first {rows.length} of {filtered.length} — refine the search to narrow down.</div>}
+          {filtered.length > rows.length && <div className="border-t border-border bg-surface-2 px-4 py-2 text-xs text-fg-3">Showing the first {rows.length} of {filtered.length}. Refine the search to narrow down.</div>}
         </div>
-      </section>
+      </Section>
     </div>
   )
 }
@@ -287,7 +264,7 @@ function PropDrawerBody({ property }: { property: Property }) {
 export function PropDrawer({ property, onClose }: { property: Property | undefined; onClose: () => void }) {
   if (!property) return null
   return (
-    <Drawer open onClose={onClose} title={property.name} subtitle={`${property.address} · ${property.city}`} width="max-w-2xl">
+    <Drawer open onClose={onClose} title={property.name} subtitle={`${property.type} · ${property.city}`} width="max-w-2xl">
       <PropDrawerBody key={property.id} property={property} />
     </Drawer>
   )

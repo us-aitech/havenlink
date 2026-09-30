@@ -1,15 +1,14 @@
 import type { KeyboardEvent } from 'react'
-import { ArrowRight, CalendarClock, CircleCheck, TriangleAlert } from 'lucide-react'
-import { Badge, Button } from '@/components/ui'
+import { CircleCheck } from 'lucide-react'
+import { Avatar, Badge, Button } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { currency, formatTime, formatWeekday, timeAgo } from '@/lib/format'
 import { WORKFLOWS, nextStage } from '@/lib/workflows'
 import type { Property, Technician, WorkOrder } from '@/types'
-import { PACKAGE_TONE } from './InstPackages'
-import { AssigneeChip, DAY_MS, dayOffset } from './MntShared'
+import { DAY_MS, dayOffset } from './MntShared'
 
 const CLOSED_WINDOW_DAYS = 14
-const CLOSED_LIMIT = 8
+const CLOSED_LIMIT = 4
 
 interface Props {
   installs: WorkOrder[]
@@ -20,6 +19,12 @@ interface Props {
   onOpen: (id: string) => void
 }
 
+function shortName(name: string): string {
+  const [firstName, ...rest] = name.split(' ')
+  const last = rest[rest.length - 1]
+  return last ? `${firstName} ${last[0]}.` : firstName
+}
+
 function slotOf(wo: WorkOrder): number {
   return wo.scheduledFor ?? wo.createdAt
 }
@@ -27,7 +32,7 @@ function slotOf(wo: WorkOrder): number {
 function whenLabel(ts: number, now: number): string {
   const diff = dayOffset(ts, now)
   const day = diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : diff === -1 ? 'Yesterday' : formatWeekday(ts)
-  return `${day} · ${formatTime(ts)}`
+  return `${day}, ${formatTime(ts)}`
 }
 
 function PipelineCard({ wo, property, tech, now, onAdvance, onOpen }: { wo: WorkOrder; property?: Property; tech?: Technician; now: number; onAdvance: (id: string) => void; onOpen: (id: string) => void }) {
@@ -51,50 +56,57 @@ function PipelineCard({ wo, property, tech, now, onAdvance, onOpen }: { wo: Work
       onClick={open}
       onKeyDown={onKeyDown}
       className={cn(
-        'group cursor-pointer rounded-xl border bg-surface-2 p-3 transition outline-none hover:border-border-strong hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-accent-line',
+        'group cursor-pointer rounded-lg border bg-surface p-3 shadow-xs transition-[border-color,box-shadow] hover:border-border-strong hover:shadow-sm',
         late ? 'border-critical-line' : 'border-border',
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[11px] text-fg-3 group-hover:text-fg-2">{wo.number}</span>
-        {wo.package && <Badge tone={PACKAGE_TONE[wo.package]}>{wo.package}</Badge>}
+        <span className="font-mono text-xs text-fg-3">{wo.number}</span>
+        {wo.package && <Badge>{wo.package}</Badge>}
       </div>
-      <div className="mt-2 truncate text-sm font-medium text-fg">{property?.name ?? wo.propertyId}</div>
+      <div className="mt-1.5 truncate text-[13px] leading-5 font-medium text-fg">{property?.name ?? wo.propertyId}</div>
       <div className="truncate text-xs text-fg-3">{wo.unit ?? 'Unit not set'}</div>
       {closed ? (
-        <div className="mt-2 flex items-center gap-1.5 text-xs text-good-fg">
-          <CircleCheck className="size-3.5" />
-          Closed {timeAgo(wo.closedAt, now)}
-          <span className="ml-auto text-fg-2 tabular">{currency(wo.billable)}</span>
+        <div className="mt-2 flex items-center gap-1.5 text-xs text-fg-3">
+          <CircleCheck className="size-3.5 shrink-0 text-good-fg" />
+          <span className="truncate">Closed {timeAgo(wo.closedAt, now)}</span>
+          <span className="ml-auto font-medium text-fg-2 tabular">{currency(wo.billable)}</span>
         </div>
       ) : (
-        <div className={cn('mt-2 flex items-center gap-1.5 text-xs', late ? 'text-critical-fg' : 'text-fg-3')}>
-          {late ? <TriangleAlert className="size-3.5 shrink-0" /> : <CalendarClock className="size-3.5 shrink-0" />}
-          <span className="truncate">
-            {late ? 'Past window · ' : ''}
-            {whenLabel(slotOf(wo), now)}
-          </span>
+        <div className={cn('mt-2 flex min-w-0 items-center gap-1.5 text-xs tabular', late ? 'text-critical-fg' : 'text-fg-2')}>
+          {late && <Badge tone="critical">Late</Badge>}
+          <span className="truncate">{whenLabel(slotOf(wo), now)}</span>
         </div>
       )}
-      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2.5">
-        <div className="min-w-0 flex-1">
-          <AssigneeChip tech={tech} />
+      {!closed && (
+        <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2.5">
+          <div className="min-w-0 flex-1">
+            {tech ? (
+              <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 text-xs text-fg-2" title={tech.name}>
+                <Avatar initials={tech.initials} size="sm" />
+                <span className="truncate">{shortName(tech.name)}</span>
+              </span>
+            ) : (
+              <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 text-xs text-fg-3">
+                <span className="size-6 shrink-0 rounded-full border border-dashed border-border-strong" />
+                <span className="truncate">Unassigned</span>
+              </span>
+            )}
+          </div>
+          {next && (
+            <Button
+              size="xs"
+              title={`Advance to “${next.label}”`}
+              onClick={(e) => {
+                e.stopPropagation()
+                onAdvance(wo.id)
+              }}
+            >
+              Advance
+            </Button>
+          )}
         </div>
-        {next && (
-          <Button
-            size="xs"
-            variant="secondary"
-            iconRight={ArrowRight}
-            title={`Move to “${next.label}”`}
-            onClick={(e) => {
-              e.stopPropagation()
-              onAdvance(wo.id)
-            }}
-          >
-            Advance
-          </Button>
-        )}
-      </div>
+      )}
     </div>
   )
 }
@@ -108,40 +120,29 @@ export function InstPipeline({ installs, properties, technicians, now, onAdvance
       const items = installs
         .filter((w) => w.stage === 'closed' && (w.closedAt ?? 0) >= now - CLOSED_WINDOW_DAYS * DAY_MS)
         .sort((a, b) => (b.closedAt ?? 0) - (a.closedAt ?? 0))
-      return { stage, title: 'Closed', note: `Last ${CLOSED_WINDOW_DAYS} days`, items }
+      return { stage, note: `Last ${CLOSED_WINDOW_DAYS} days`, items }
     }
     const items = installs.filter((w) => w.stage === stage.key).sort((a, b) => slotOf(a) - slotOf(b))
-    return { stage, title: stage.label, note: null, items }
+    return { stage, note: null, items }
   })
 
   return (
-    <div className="relative -mx-5 snap-x snap-mandatory scroll-px-5 overflow-x-auto px-5 pb-1 sm:snap-none">
-      <div className="grid auto-cols-[minmax(212px,1fr)] grid-flow-col gap-3">
+    <div className="relative overflow-x-auto overscroll-x-contain">
+      <div className="grid min-w-max auto-cols-[minmax(216px,1fr)] grid-flow-col divide-x divide-border border-t border-border sm:min-w-full">
         {columns.map((col, i) => {
           const shown = col.stage.key === 'closed' ? col.items.slice(0, CLOSED_LIMIT) : col.items
           const hidden = col.items.length - shown.length
           return (
-            <section key={col.stage.key} className="flex min-h-[220px] snap-start flex-col rounded-xl border border-border bg-surface-2" aria-label={col.title}>
-              <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2.5">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span
-                    className={cn(
-                      'flex size-5 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold tabular',
-                      col.stage.key === 'closed' ? 'bg-good-soft text-good-fg' : 'bg-surface-2 text-fg-3',
-                    )}
-                  >
-                    {col.stage.key === 'closed' ? <CircleCheck className="size-3" /> : i + 1}
-                  </span>
-                  <div className="min-w-0">
-                    <div className="truncate text-xs font-semibold text-fg">{col.title}</div>
-                    {col.note && <div className="text-[10px] text-fg-3">{col.note}</div>}
-                  </div>
-                </div>
-                <span className="rounded-md bg-surface-2 px-1.5 text-[10px] text-fg-3 tabular">{col.items.length}</span>
+            <section key={col.stage.key} className="flex min-h-[240px] flex-col" aria-label={col.stage.label}>
+              <header className="flex h-11 items-center gap-2 border-b border-border bg-surface-2 px-3">
+                <span className="w-3.5 shrink-0 text-xs text-fg-3 tabular">{i + 1}</span>
+                <h3 className="min-w-0 truncate text-[13px] font-medium text-fg">{col.stage.label}</h3>
+                <span className="ml-auto shrink-0 rounded-md bg-surface-3 px-1.5 text-xs leading-5 font-medium text-fg-2 tabular">{col.items.length}</span>
               </header>
-              <div className="flex flex-1 flex-col gap-2 p-2">
+              <div className="flex flex-1 flex-col gap-2 p-2.5">
+                {col.note && <div className="px-0.5 text-xs text-fg-3">{col.note}</div>}
                 {shown.length === 0 ? (
-                  <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-fg-4">No installs here</div>
+                  <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border-strong px-3 py-6 text-center text-xs text-fg-3">No installs</div>
                 ) : (
                   shown.map((wo) => (
                     <PipelineCard
@@ -155,7 +156,7 @@ export function InstPipeline({ installs, properties, technicians, now, onAdvance
                     />
                   ))
                 )}
-                {hidden > 0 && <div className="px-1 pt-1 text-center text-[11px] text-fg-3">+{hidden} more closed</div>}
+                {hidden > 0 && <div className="px-1 pt-1 text-center text-xs text-fg-3">+{hidden} more closed</div>}
               </div>
             </section>
           )

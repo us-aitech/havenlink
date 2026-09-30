@@ -1,12 +1,11 @@
-import { useMemo } from 'react'
-import { House, Server, Split } from 'lucide-react'
+import { useMemo, type ReactNode } from 'react'
+import { House, Server, Split, type LucideIcon } from 'lucide-react'
 import { Badge } from '@/components/ui'
 import { cn } from '@/lib/cn'
-import { dbm } from '@/lib/format'
-import { ONT_STATUS_LABEL } from '@/lib/workflows'
 import { useStore } from '@/store/useStore'
 import type { Ont, OntStatus, Splitter } from '@/types'
-import { ONT_STATUSES, ONT_STATUS_ICON, ONT_TILE_CLASS, shortUnit } from './NetUtils'
+import { OntCell, OntLegend } from './NetParts'
+import { ONT_STATUS_ICON } from './NetUtils'
 
 interface OntView {
   ont: Ont
@@ -14,105 +13,90 @@ interface OntView {
   rx: number | null
 }
 
-function OntTile({ view, selected, onSelect }: { view: OntView; selected: boolean; onSelect: (id: string) => void }) {
-  const { ont, status, rx } = view
-  const Icon = ONT_STATUS_ICON[status]
-  const label = `${ont.unit} · ${ONT_STATUS_LABEL[status]} · ${dbm(rx)}${ont.smartHome ? ' · Smart home' : ''}${ont.isDemoHome ? ' · Demo home' : ''}`
+interface Branch {
+  primary: Splitter
+  children: Array<{ splitter: Splitter; views: OntView[]; cut: boolean }>
+  total: number
+  online: number
+  cut: boolean
+}
+
+const SECONDARY_PORTS = 8
+
+function Connector({ last, top, trunkCut, stubCut }: { last: boolean; top: number; trunkCut?: boolean; stubCut?: boolean }) {
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(ont.id)}
-      title={label}
-      aria-label={label}
-      className={cn(
-        'relative flex h-10 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md font-mono text-[10px] leading-none ring-1 transition ring-inset',
-        ONT_TILE_CLASS[status],
-        status === 'los' && 'animate-pulse',
-        ont.isDemoHome && 'ring-2 ring-accent',
-        selected && 'outline-2 outline-offset-2 outline-white/80',
-      )}
-    >
-      <span className="max-w-full truncate px-1">{shortUnit(ont.unit)}</span>
-      <Icon className={cn('size-2.5', status === 'online' && 'opacity-50')} />
-      {ont.smartHome && !ont.isDemoHome && <span className="absolute top-1 right-1 size-1.5 rounded-full bg-accent" />}
-      {ont.isDemoHome && <House className="absolute top-0.5 right-0.5 size-2.5 text-accent-fg" />}
-    </button>
+    <>
+      <span aria-hidden className={cn('absolute top-0 left-0 w-px', trunkCut ? 'bg-critical' : 'bg-border-strong')} style={{ height: last ? top : '100%' }} />
+      <span aria-hidden className={cn('absolute left-0 h-px w-5', stubCut ? 'bg-critical' : 'bg-border-strong')} style={{ top }} />
+    </>
   )
 }
 
-function SecondaryCard({ splitter, views, selectedOntId, onSelectOnt }: { splitter: Splitter; views: OntView[]; selectedOntId: string | null; onSelectOnt: (id: string) => void }) {
-  const online = views.filter((v) => v.status === 'online').length
-  const allLos = views.length > 0 && views.every((v) => v.status === 'los')
-  const hasDemo = views.some((v) => v.ont.isDemoHome)
-  const alarms = views.length - online
-  const spare = Math.max(0, 8 - views.length)
+function OnlineCount({ online, total, cut }: { online: number; total: number; cut?: boolean }) {
+  if (cut) {
+    return (
+      <Badge tone="critical" icon={ONT_STATUS_ICON.los}>
+        Fiber cut suspected
+      </Badge>
+    )
+  }
   return (
-    <div className={cn('rounded-xl border p-3 transition', allLos ? 'border-critical-line bg-critical-soft' : hasDemo ? 'border-accent-line bg-accent-soft' : 'border-border bg-surface-2')}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="font-mono text-xs font-semibold whitespace-nowrap text-fg">{splitter.name}</span>
-          <span className="rounded bg-surface-2 px-1 text-[10px] text-fg-3">{splitter.ratio}</span>
-        </div>
-        {allLos ? (
-          <Badge tone="critical" icon={ONT_STATUS_ICON.los}>
-            LOS
-          </Badge>
-        ) : (
-          <span className={cn('shrink-0 text-[11px] tabular', alarms ? 'text-warning-fg' : 'text-fg-3')}>
-            {online}/{views.length} online
-          </span>
-        )}
-      </div>
-      <div className="mt-1 flex items-center justify-between gap-2">
-        <span className="truncate text-[11px] text-fg-3">
-          {splitter.cabinet} · {splitter.lossDb} dB
+    <span className={cn('text-xs whitespace-nowrap tabular', total > 0 && online === 0 ? 'font-medium text-critical-fg' : online < total ? 'font-medium text-warning-fg' : 'text-fg-3')}>
+      {online}/{total} online
+    </span>
+  )
+}
+
+function SecondaryRow({ splitter, views, cut, selectedOntId, onSelectOnt }: { splitter: Splitter; views: OntView[]; cut: boolean; selectedOntId: string | null; onSelectOnt: (id: string) => void }) {
+  const online = views.filter((v) => v.status === 'online').length
+  const demo = views.find((v) => v.ont.isDemoHome)
+  const spare = Math.max(0, SECONDARY_PORTS - views.length)
+  return (
+    <div className={cn('-mx-2 flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2 rounded-lg px-2 py-1.5 sm:flex-nowrap', cut && 'bg-critical-soft')}>
+      <div className="flex h-6 w-full items-center gap-2 sm:w-40 sm:shrink-0">
+        <span className={cn('font-mono text-xs font-medium whitespace-nowrap', cut ? 'text-critical-fg' : 'text-fg')}>{splitter.name}</span>
+        <span className="text-xs text-fg-3">{splitter.ratio}</span>
+        <span className="ml-auto sm:hidden">
+          <OnlineCount online={online} total={views.length} cut={cut} />
         </span>
-        {hasDemo && (
-          <Badge tone="accent" icon={House}>
-            Demo home
-          </Badge>
-        )}
       </div>
-      <div className="mt-3 grid grid-cols-4 gap-1.5">
+      <div className="flex shrink-0 items-center gap-1.5">
         {views.map((v) => (
-          <OntTile key={v.ont.id} view={v} selected={v.ont.id === selectedOntId} onSelect={onSelectOnt} />
+          <OntCell key={v.ont.id} ont={v.ont} status={v.status} rx={v.rx} selected={v.ont.id === selectedOntId} onSelect={onSelectOnt} />
         ))}
         {Array.from({ length: spare }, (_, i) => (
-          <div key={`spare-${i}`} title="Spare port" className="flex h-10 items-center justify-center rounded-md border border-dashed border-border text-[10px] text-fg-4">
-            spare
-          </div>
+          <span key={`spare-${i}`} title="Spare port" className="size-5 shrink-0 rounded-[4px] border border-dashed border-border-strong" />
         ))}
       </div>
+      <div className={cn('min-w-0 flex-1 items-center gap-3', demo ? 'flex basis-full sm:basis-0' : 'hidden sm:flex')}>
+        <span className="hidden truncate text-xs text-fg-3 lg:inline">
+          {splitter.cabinet} · {splitter.lossDb} dB
+        </span>
+        {demo && (
+          <button type="button" onClick={() => onSelectOnt(demo.ont.id)} className="inline-flex min-w-0 items-center gap-1.5 rounded-md text-xs font-medium text-accent-fg hover:underline">
+            <House className="size-3.5 shrink-0" />
+            <span className="truncate">Demo home · {demo.ont.unit}</span>
+          </button>
+        )}
+        <span className="ml-auto hidden shrink-0 sm:inline-flex">
+          <OnlineCount online={online} total={views.length} cut={cut} />
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function NodeBox({ icon: Icon, children, cut, className }: { icon: LucideIcon; children: ReactNode; cut?: boolean; className?: string }) {
+  return (
+    <div className={cn('inline-flex min-w-0 items-center gap-2 rounded-lg border px-2.5', cut ? 'border-critical-line bg-critical-soft' : 'border-border-strong bg-surface', className)}>
+      <Icon className={cn('size-4 shrink-0', cut ? 'text-critical-fg' : 'text-fg-3')} />
+      {children}
     </div>
   )
 }
 
 export function NetTopologyLegend({ className }: { className?: string }) {
-  return (
-    <div className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-fg-3', className)}>
-      {ONT_STATUSES.map((s) => {
-        const Icon = ONT_STATUS_ICON[s]
-        return (
-          <span key={s} className="inline-flex items-center gap-1.5">
-            <span className={cn('inline-flex size-4 items-center justify-center rounded ring-1 ring-inset', ONT_TILE_CLASS[s])}>
-              <Icon className="size-2.5" />
-            </span>
-            {ONT_STATUS_LABEL[s]}
-          </span>
-        )
-      })}
-      <span className="inline-flex items-center gap-1.5">
-        <span className="size-1.5 rounded-full bg-accent" />
-        Smart-home unit
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="inline-flex size-4 items-center justify-center rounded ring-2 ring-accent">
-          <House className="size-2.5 text-accent-fg" />
-        </span>
-        Demo home
-      </span>
-    </div>
-  )
+  return <OntLegend className={className} />
 }
 
 export function NetTopology({ propertyId, selectedOntId, onSelectOnt }: { propertyId: string; selectedOntId: string | null; onSelectOnt: (id: string) => void }) {
@@ -120,75 +104,78 @@ export function NetTopology({ propertyId, selectedOntId, onSelectOnt }: { proper
   const onts = useStore((s) => s.ops.onts)
   const olts = useStore((s) => s.ops.olts)
   const properties = useStore((s) => s.ops.properties)
-  const homeNetwork = useStore((s) => s.home.network)
+  const homeStatus = useStore((s) => s.home.network.status)
+  const homeRx = useStore((s) => s.home.network.rxPowerDbm)
 
-  const tree = useMemo(() => {
+  const tree = useMemo<Branch[]>(() => {
     const views = new Map<string, OntView[]>()
     for (const o of onts) {
       if (o.propertyId !== propertyId) continue
-      const view: OntView = { ont: o, status: o.isDemoHome ? homeNetwork.status : o.status, rx: o.isDemoHome ? homeNetwork.rxPowerDbm : o.rxPowerDbm }
+      const view: OntView = { ont: o, status: o.isDemoHome ? homeStatus : o.status, rx: o.isDemoHome ? homeRx : o.rxPowerDbm }
       const list = views.get(o.splitterId)
       if (list) list.push(view)
       else views.set(o.splitterId, [view])
     }
+    const allLos = (list: OntView[]) => list.length > 0 && list.every((v) => v.ont.status === 'los')
     const local = splitters.filter((s) => s.propertyId === propertyId)
     return local
       .filter((s) => s.parentId === null)
       .map((primary) => {
-        const children = local.filter((s) => s.parentId === primary.id).map((s) => ({ splitter: s, views: views.get(s.id) ?? [] }))
-        const all = children.flatMap((c) => c.views)
-        return { primary, children, total: all.length, online: all.filter((v) => v.status === 'online').length }
+        const kids = local.filter((s) => s.parentId === primary.id).map((s) => ({ splitter: s, views: views.get(s.id) ?? [] }))
+        const all = kids.flatMap((c) => c.views)
+        const cut = allLos(all)
+        return {
+          primary,
+          children: kids.map((c) => ({ ...c, cut: !cut && allLos(c.views) })),
+          total: all.length,
+          online: all.filter((v) => v.status === 'online').length,
+          cut,
+        }
       })
-  }, [splitters, onts, propertyId, homeNetwork.status, homeNetwork.rxPowerDbm])
+  }, [splitters, onts, propertyId, homeStatus, homeRx])
 
   const property = properties.find((p) => p.id === propertyId)
   const olt = olts.find((o) => o.id === property?.oltId)
-  const portNumber = (olts.findIndex((o) => o.id === olt?.id) * 5 + properties.findIndex((p) => p.id === propertyId)) % (olt?.ponPorts ?? 16) + 1
+  const portNumber = ((olts.findIndex((o) => o.id === olt?.id) * 5 + properties.findIndex((p) => p.id === propertyId)) % (olt?.ponPorts ?? 16)) + 1
 
   return (
     <div className="min-w-0">
-      <div className="inline-flex max-w-full items-center gap-3 rounded-xl border border-accent-line bg-accent-soft px-3 py-2.5">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft ring-1 ring-accent-line ring-inset">
-          <Server className="size-4 text-accent-fg" />
-        </div>
+      <NodeBox icon={Server} className="max-w-full py-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-2">
-            <span className="font-mono text-sm font-semibold text-fg">{olt?.name ?? 'OLT'}</span>
-            <span className="text-[11px] text-accent-fg">PON {portNumber}</span>
+            <span className="font-mono text-[13px] font-semibold text-fg">{olt?.name ?? 'OLT'}</span>
+            <span className="text-xs text-fg-3 tabular">PON {portNumber}</span>
           </div>
-          <div className="truncate text-[11px] text-fg-3">{olt?.location} · GPON 2.5G / 1.25G</div>
+          <div className="truncate text-xs text-fg-3">{olt?.location} · GPON 2.5G / 1.25G</div>
         </div>
-      </div>
-      <div className="ml-[31px]">
-        {tree.map((branch, i) => {
-          const isLast = i === tree.length - 1
-          const alarms = branch.total - branch.online
-          return (
-            <div key={branch.primary.id} className="relative pt-4 pl-5 sm:pl-7">
-              <span className={cn('absolute top-0 left-0 w-px bg-line-strong', isLast ? 'h-[34px]' : 'h-full')} />
-              <span className="absolute top-[34px] left-0 h-px w-5 bg-line-strong sm:w-7" />
-              <div className="flex h-9 min-w-0 items-center gap-2">
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-surface-2 text-fg-2 ring-1 ring-border ring-inset">
-                  <Split className="size-3.5 rotate-90" />
-                </span>
-                <span className="font-mono text-sm font-semibold text-fg">{branch.primary.name}</span>
-                <span className="rounded bg-surface-2 px-1 text-[10px] text-fg-3">{branch.primary.ratio}</span>
-                <span className="hidden truncate text-xs text-fg-3 sm:inline">
-                  {branch.primary.cabinet} · {branch.primary.lossDb} dB loss
-                </span>
-                <span className={cn('ml-auto shrink-0 text-xs tabular', alarms ? 'text-warning-fg' : 'text-fg-3')}>
-                  {branch.online}/{branch.total} online
-                </span>
-              </div>
-              <div className="mt-2 ml-3.5 grid grid-cols-1 gap-3 border-l border-dashed border-border-strong pt-1 pb-2 pl-3 sm:grid-cols-2 sm:pl-4 xl:grid-cols-4">
-                {branch.children.map((c) => (
-                  <SecondaryCard key={c.splitter.id} splitter={c.splitter} views={c.views} selectedOntId={selectedOntId} onSelectOnt={onSelectOnt} />
-                ))}
-              </div>
+      </NodeBox>
+      <ul className="ml-[19px]">
+        {tree.map((branch, i) => (
+          <li key={branch.primary.id} className="relative pt-3 pl-5">
+            <Connector last={i === tree.length - 1} top={30} stubCut={branch.cut} />
+            <div className="flex h-9 min-w-0 items-center gap-3">
+              <NodeBox icon={Split} cut={branch.cut} className="h-9 shrink-0">
+                <span className={cn('font-mono text-[13px] font-semibold', branch.cut ? 'text-critical-fg' : 'text-fg')}>{branch.primary.name}</span>
+                <span className="text-xs text-fg-3">{branch.primary.ratio}</span>
+              </NodeBox>
+              <span className="hidden min-w-0 truncate text-xs text-fg-3 sm:inline">
+                {branch.primary.cabinet} · {branch.primary.lossDb} dB loss
+              </span>
+              <span className="ml-auto shrink-0">
+                <OnlineCount online={branch.online} total={branch.total} cut={branch.cut} />
+              </span>
             </div>
-          )
-        })}
-      </div>
+            <ul className="ml-[19px]">
+              {branch.children.map((c, j) => (
+                <li key={c.splitter.id} className="relative pt-2 pl-5">
+                  <Connector last={j === branch.children.length - 1} top={26} trunkCut={branch.cut} stubCut={branch.cut || c.cut} />
+                  <SecondaryRow splitter={c.splitter} views={c.views} cut={c.cut} selectedOntId={selectedOntId} onSelectOnt={onSelectOnt} />
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
