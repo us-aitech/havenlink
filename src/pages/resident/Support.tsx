@@ -5,6 +5,7 @@ import { Avatar, Badge, Button, Card, CardHeader, EmptyState, Field, Input, KeyV
 import { DEMO_ONT_ID } from '@/data/seed'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { useNow, usePartner } from '@/lib/hooks'
+import { fiberCutReaches } from '@/lib/fiber'
 import { WORKFLOWS, WORK_ORDER_TYPE_LABEL, isOpen, stageIndex } from '@/lib/workflows'
 import { useStore } from '@/store/useStore'
 import type { WorkOrder } from '@/types'
@@ -60,6 +61,8 @@ function RequestRow({ wo }: { wo: WorkOrder }) {
 export default function Support() {
   const home = useStore((s) => s.home)
   const workOrders = useStore((s) => s.ops.workOrders)
+  const splitters = useStore((s) => s.ops.splitters)
+  const demoOnt = useStore((s) => s.ops.onts.find((o) => o.id === DEMO_ONT_ID))
   const createRequest = useStore((s) => s.createResidentRequest)
   const partner = usePartner()
   const [kind, setKind] = useState<'support' | 'install'>('support')
@@ -69,7 +72,7 @@ export default function Support() {
   const [date, setDate] = useState(defaultDate)
 
   const mine = workOrders
-    .filter((w) => w.ontId === DEMO_ONT_ID || (w.propertyId === home.propertyId && w.unit === home.unit) || (w.incident === 'fiber-cut' && isOpen(w)))
+    .filter((w) => w.ontId === DEMO_ONT_ID || (w.propertyId === home.propertyId && w.unit === home.unit) || (isOpen(w) && demoOnt !== undefined && fiberCutReaches(w, demoOnt, splitters)))
     .sort((a, b) => Number(isOpen(b)) - Number(isOpen(a)) || b.createdAt - a.createdAt)
   const openCount = mine.filter(isOpen).length
 

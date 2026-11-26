@@ -1,4 +1,5 @@
 import { PowerOff, SignalLow, Unplug, Wifi, type LucideIcon } from 'lucide-react'
+import { locateFiberFaults } from '@/lib/fiber'
 import type { Ont, OntStatus, Splitter } from '@/types'
 
 export const RX_THRESHOLD = -27
@@ -51,34 +52,9 @@ export interface CutDetection {
   ontCount: number
 }
 
+/** Shared-fiber outages (feeder or splitter level), from the same rules as the Fiber signal panel. */
 export function detectFiberCuts(splitters: Splitter[], onts: Ont[]): CutDetection[] {
-  const ontsBySplitter = new Map<string, Ont[]>()
-  for (const o of onts) {
-    const list = ontsBySplitter.get(o.splitterId)
-    if (list) list.push(o)
-    else ontsBySplitter.set(o.splitterId, [o])
-  }
-  const childrenOf = new Map<string, Splitter[]>()
-  for (const s of splitters) {
-    if (!s.parentId) continue
-    const list = childrenOf.get(s.parentId)
-    if (list) list.push(s)
-    else childrenOf.set(s.parentId, [s])
-  }
-  const allLos = (list: Ont[]) => list.length > 0 && list.every((o) => o.status === 'los')
-  const results: CutDetection[] = []
-  for (const primary of splitters) {
-    if (primary.parentId) continue
-    const secondaries = childrenOf.get(primary.id) ?? []
-    const downstream = secondaries.flatMap((s) => ontsBySplitter.get(s.id) ?? [])
-    if (allLos(downstream)) {
-      results.push({ splitter: primary, ontCount: downstream.length })
-      continue
-    }
-    for (const s of secondaries) {
-      const list = ontsBySplitter.get(s.id) ?? []
-      if (allLos(list)) results.push({ splitter: s, ontCount: list.length })
-    }
-  }
-  return results
+  return locateFiberFaults(splitters, onts)
+    .filter((f) => f.level === 'feeder' || f.level === 'splitter')
+    .map((f) => ({ splitter: f.splitter, ontCount: f.onts.length }))
 }

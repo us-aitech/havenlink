@@ -1,5 +1,6 @@
 import { DEMO, getPartner } from '@/config'
 import { DEMO_ONT_ID } from '@/data/seed'
+import { splitterSubtree } from '@/lib/fiber'
 import { chance, pick, rand, randInt, round, uid } from '@/lib/random'
 import { SLA_HOURS, WORKFLOWS, nextStage } from '@/lib/workflows'
 import type {
@@ -13,6 +14,7 @@ import type {
   SecurityMode,
   SmartPackage,
   Technician,
+  Ont,
   Toast,
   WorkOrder,
   WorkOrderSource,
@@ -53,7 +55,40 @@ function propertyName(d: AppData, id: string): string {
 }
 
 function isDemoWorkOrder(d: AppData, wo: WorkOrder): boolean {
-  return wo.ontId === DEMO_ONT_ID || (wo.propertyId === d.home.propertyId && wo.unit === d.home.unit) || wo.incident === 'fiber-cut'
+  return wo.ontId === DEMO_ONT_ID || (wo.propertyId === d.home.propertyId && wo.unit === d.home.unit) || (wo.incident === 'fiber-cut' && cutOnts(d, wo).some((o) => o.isDemoHome))
+}
+
+/** Every ONT downstream of a fiber-cut work order's splitter (1:4 feeder or 1:8 distribution). */
+function cutOnts(d: AppData, wo: WorkOrder): Ont[] {
+  const splitterId = wo.splitterId ?? d.ops.onts.find((o) => o.id === DEMO_ONT_ID)?.splitterId
+  if (!splitterId) return []
+  const ids = splitterSubtree(d.ops.splitters, splitterId)
+  return d.ops.onts.filter((o) => ids.has(o.splitterId))
+}
+
+/** Demo home loses light: resident side goes to LOS and the hub fails over to LTE. */
+function startHomeOutage(d: AppData) {
+  const n = d.home.network
+  n.status = 'los'
+  n.rxPowerDbm = null
+  n.speedTest.running = false
+  if (automationEnabled(d, 'outage-backup')) {
+    n.backupActive = true
+    markAutomationRun(d, 'outage-backup')
+    addEvent(d, { severity: 'warning', category: 'automation', scope: 'home', title: 'Hub switched to LTE backup', detail: 'Alarm, cameras and leak protection remain online' })
+  }
+}
+
+function endHomeOutage(d: AppData, now: number) {
+  const n = d.home.network
+  n.status = 'online'
+  n.rxPowerDbm = -19.4
+  n.backupActive = false
+  n.onlineSince = now
+  n.latencyMs = 4
+  n.packetLoss = 0
+  for (const node of n.meshNodes) node.online = true
+  if (d.alert?.kind === 'outage') d.alert = null
 }
 
 export interface NewWorkOrder {
@@ -227,26 +262,36 @@ export function advanceWorkOrder(d: AppData, woId: string, note?: string) {
 function resolveIncident(d: AppData, wo: WorkOrder) {
   const now = Date.now()
   if (wo.incident === 'fiber-cut') {
-    const splitterId = wo.splitterId ?? d.ops.onts.find((o) => o.id === DEMO_ONT_ID)?.splitterId
-    const restored = d.ops.onts.filter((o) => o.splitterId === splitterId && o.status === 'los')
+    const restored = cutOnts(d, wo).filter((o) => o.status === 'los')
     for (const o of restored) {
       o.status = 'online'
       o.rxPowerDbm = o.isDemoHome ? -19.4 : round(rand(-22.5, -15), 1)
       o.lastTestAt = now
     }
-    const n = d.home.network
-    if (restored.some((o) => o.isDemoHome) || n.status === 'los') {
-      n.status = 'online'
-      n.rxPowerDbm = -19.4
-      n.backupActive = false
-      n.onlineSince = now
-      n.latencyMs = 4
-      n.packetLoss = 0
-      for (const node of n.meshNodes) node.online = true
+    const demo = restored.some((o) => o.isDemoHome)
+    if (demo) endHomeOutage(d, now)
+    if (restored.length) addEvent(d, { severity: 'success', category: 'network', scope: demo ? 'both' : 'ops', title: 'Fiber service restored', detail: `${restored.length} homes back online · ${wo.number}`, propertyId: wo.propertyId })
+    if (restored.length) addToast(d, { scope: demo ? undefined : 'ops', severity: 'success', title: 'Fiber service restored', message: `${restored.length} homes back online.${demo ? ' Hub switched back from LTE backup.' : ''}` })
+  }
+  if (wo.incident === 'drop-fault' || wo.incident === 'ont-power') {
+    const ont = d.ops.onts.find((o) => o.id === wo.ontId)
+    const power = wo.incident === 'ont-power'
+    if (ont && ont.status !== 'online' && ont.status !== 'degraded') {
+      ont.status = 'online'
+      ont.rxPowerDbm = ont.isDemoHome ? -19.4 : round(rand(-22.5, -15), 1)
+      ont.lastTestAt = now
+      if (!power) d.ops.lightLevels.unshift({ id: uid('ll'), ontId: ont.id, point: 'ONT', dbm: ont.rxPowerDbm, at: now, pass: true, by: techName(d, wo.assigneeId) })
+      if (ont.isDemoHome) endHomeOutage(d, now)
     }
-    if (d.alert?.kind === 'outage') d.alert = null
-    addEvent(d, { severity: 'success', category: 'network', scope: 'both', title: 'Fiber service restored', detail: `${restored.length} homes back online · ${wo.number}`, propertyId: wo.propertyId })
-    addToast(d, { severity: 'success', title: 'Fiber service restored', message: `${restored.length} homes back online. Hub switched back from LTE backup.` })
+    addEvent(d, {
+      severity: 'success',
+      category: 'network',
+      scope: ont?.isDemoHome ? 'both' : 'ops',
+      title: power ? 'ONT back online' : 'Fiber drop repaired',
+      detail: `${ont?.unit ?? ''} · ${power ? 'power restored at the home' : 'drop spliced, light verified at the ONT'} · ${wo.number}`,
+      propertyId: wo.propertyId,
+    })
+    if (ont?.isDemoHome) addToast(d, { scope: 'home', severity: 'success', title: 'Internet is back', message: power ? 'Your fiber modem is back online.' : 'Your technician repaired the fiber line to your home.' })
   }
   if (wo.incident === 'signal-degradation') {
     const ont = d.ops.onts.find((o) => o.id === wo.ontId)
@@ -724,20 +769,12 @@ export function runScenario(d: AppData, key: ScenarioKey) {
       const demoOnt = d.ops.onts.find((o) => o.id === DEMO_ONT_ID)
       if (!demoOnt || d.home.network.status === 'los') return
       const splitter = d.ops.splitters.find((s) => s.id === demoOnt.splitterId)
-      const affected = d.ops.onts.filter((o) => o.splitterId === demoOnt.splitterId)
+      const affected = d.ops.onts.filter((o) => o.splitterId === demoOnt.splitterId && o.status !== 'offline')
       for (const o of affected) {
         o.status = 'los'
         o.rxPowerDbm = null
       }
-      const n = d.home.network
-      n.status = 'los'
-      n.rxPowerDbm = null
-      n.speedTest.running = false
-      if (automationEnabled(d, 'outage-backup')) {
-        n.backupActive = true
-        markAutomationRun(d, 'outage-backup')
-        addEvent(d, { severity: 'warning', category: 'automation', scope: 'home', title: 'Hub switched to LTE backup', detail: 'Alarm, cameras and leak protection remain online' })
-      }
+      startHomeOutage(d)
       const tech = bestTechnicianFor(d, 'emergency')
       const wo = createWorkOrder(d, {
         type: 'emergency',
@@ -758,6 +795,82 @@ export function runScenario(d: AppData, key: ScenarioKey) {
         message: `We lost the fiber signal to your home and ${affected.length - 1} neighbors. ${tech ? `${tech.name} has been dispatched (${wo.number}).` : `${wo.number} has been opened.`} Your alarm, cameras and leak protection stay online through the hub's LTE backup.`,
       })
       addToast(d, { scope: 'ops', severity: 'critical', title: `P1 emergency ${wo.number}`, message: `Fiber cut at ${propertyName(d, demoOnt.propertyId)} — ${affected.length} homes down` })
+      break
+    }
+    case 'feeder-cut': {
+      const demoOnt = d.ops.onts.find((o) => o.id === DEMO_ONT_ID)
+      if (!demoOnt || d.home.network.status === 'los') return
+      const primary = d.ops.splitters.find((s) => s.id === d.ops.splitters.find((x) => x.id === demoOnt.splitterId)?.parentId)
+      if (!primary) return
+      const ids = splitterSubtree(d.ops.splitters, primary.id)
+      const affected = d.ops.onts.filter((o) => ids.has(o.splitterId) && o.status !== 'offline')
+      for (const o of affected) {
+        o.status = 'los'
+        o.rxPowerDbm = null
+      }
+      startHomeOutage(d)
+      const splitterCount = d.ops.splitters.filter((s) => s.parentId === primary.id).length
+      const tech = bestTechnicianFor(d, 'emergency')
+      const wo = createWorkOrder(d, {
+        type: 'emergency',
+        priority: 'P1',
+        title: `Feeder cut — ${primary.name} · ${affected.length} homes down`,
+        description: `PON alarm: every splitter under ${primary.name} (${primary.cabinet}) lost light at once — ${splitterCount} splitters, ${affected.length} ONTs. The break is upstream of the cabinet (feeder cable on the street run). OTDR from the cabinet toward the OLT, splice, test and document.`,
+        propertyId: demoOnt.propertyId,
+        splitterId: primary.id,
+        source: 'Auto-detect',
+        incident: 'fiber-cut',
+        assigneeId: tech?.id ?? null,
+      })
+      addEvent(d, { severity: 'critical', category: 'network', scope: 'ops', title: `PON alarm — LOS on ${affected.length} ONTs`, detail: `Feeder ${primary.name} · ${propertyName(d, demoOnt.propertyId)} · ${wo.number} auto-dispatched${tech ? ` to ${tech.name}` : ''}`, propertyId: demoOnt.propertyId })
+      addEvent(d, { severity: 'critical', category: 'network', scope: 'home', title: 'Internet outage — fiber signal lost', detail: `${partner.short} fiber down in your area · technician dispatched` })
+      raiseAlert(d, {
+        kind: 'outage',
+        title: 'Internet outage in your area',
+        message: `A fiber cable feeding your neighborhood was damaged. ${tech ? `${tech.name} has been dispatched (${wo.number}).` : `${wo.number} has been opened.`} Your alarm, cameras and leak protection stay online through the hub's LTE backup.`,
+      })
+      addToast(d, { scope: 'ops', severity: 'critical', title: `P1 emergency ${wo.number}`, message: `Feeder cut at ${propertyName(d, demoOnt.propertyId)} — ${affected.length} homes down` })
+      break
+    }
+    case 'drop-cut': {
+      const demoOnt = d.ops.onts.find((o) => o.id === DEMO_ONT_ID)
+      if (!demoOnt || d.home.network.status === 'los') return
+      const splitter = d.ops.splitters.find((s) => s.id === demoOnt.splitterId)
+      const neighborsLit = d.ops.onts.filter((o) => o.splitterId === demoOnt.splitterId && o.id !== demoOnt.id && (o.status === 'online' || o.status === 'degraded')).length
+      demoOnt.status = 'los'
+      demoOnt.rxPowerDbm = null
+      startHomeOutage(d)
+      const tech = bestTechnicianFor(d, 'trouble')
+      const wo = createWorkOrder(d, {
+        type: 'trouble',
+        priority: 'P2',
+        title: `No fiber signal — ${d.home.unit}`,
+        description: `ONT ${demoOnt.serial} reports LOS. ${neighborsLit ? `${neighborsLit} neighbors on ${splitter?.name} (${splitter?.cabinet}) still have light, so the network is fine up to the splitter port.` : `No lit neighbor on ${splitter?.name} (${splitter?.cabinet}) to compare with, so the splitter port can't be ruled out.`} Check the drop from ${splitter?.cabinet} to the home, then the wall outlet, patch cord and ONT. Measure light at the splitter port first.`,
+        propertyId: d.home.propertyId,
+        unit: d.home.unit,
+        ontId: DEMO_ONT_ID,
+        source: 'Auto-detect',
+        incident: 'drop-fault',
+        assigneeId: tech?.id ?? null,
+      })
+      addEvent(d, { severity: 'warning', category: 'network', scope: 'ops', title: `LOS on a single ONT — ${d.home.unit}`, detail: `Neighbors on ${splitter?.name} lit → drop or in-home fault · ${wo.number}`, propertyId: d.home.propertyId })
+      addEvent(d, { severity: 'critical', category: 'network', scope: 'home', title: 'Internet outage — fiber signal lost', detail: 'The fiber line to your home is down · technician dispatched' })
+      raiseAlert(d, {
+        kind: 'outage',
+        title: 'No fiber signal at your home',
+        message: `The fiber line to your home stopped carrying light. Your neighbors are not affected. ${tech ? `${tech.name} has been dispatched (${wo.number}).` : `${wo.number} has been opened.`} Your alarm, cameras and leak protection stay online through the hub's LTE backup.`,
+      })
+      addToast(d, { scope: 'ops', severity: 'warning', title: `P2 drop repair ${wo.number}`, message: `${d.home.unit} — only this home is dark on ${splitter?.name}` })
+      break
+    }
+    case 'ont-power-loss': {
+      const candidates = d.ops.onts.filter((o) => o.propertyId === d.home.propertyId && o.status === 'online' && !o.isDemoHome)
+      if (!candidates.length) return
+      const ont = pick(candidates)
+      ont.status = 'offline'
+      ont.rxPowerDbm = null
+      addEvent(d, { severity: 'warning', category: 'network', scope: 'ops', title: `ONT stopped responding — ${ont.unit}`, detail: `${propertyName(d, ont.propertyId)} · no LOS alarm, likely power at the home`, propertyId: ont.propertyId })
+      addToast(d, { scope: 'ops', severity: 'info', title: `ONT not responding · ${ont.unit}`, message: 'No fiber alarm. Check power with the resident before sending a truck.' })
       break
     }
     case 'signal-degradation': {

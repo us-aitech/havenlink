@@ -11,7 +11,7 @@ import { DEMO_PROPERTY_ID } from '@/data/seed'
 import { cn } from '@/lib/cn'
 import { dbm, num, pct, timeAgo } from '@/lib/format'
 import { useNow, usePartner } from '@/lib/hooks'
-import { isOpen } from '@/lib/workflows'
+import { fiberCutWorkOrderFor } from '@/lib/fiber'
 import { bestTechnicianFor } from '@/sim/engine'
 import { useStore } from '@/store/useStore'
 import type { OntStatus } from '@/types'
@@ -23,9 +23,8 @@ function FiberCutCallout({ cut, onLocate }: { cut: CutDetection; onLocate: (prop
   const technicians = useStore((s) => s.ops.technicians)
   const properties = useStore((s) => s.ops.properties)
   const createWorkOrder = useStore((s) => s.createWorkOrder)
-  const wo =
-    workOrders.find((w) => isOpen(w) && w.splitterId === cut.splitter.id) ??
-    workOrders.find((w) => isOpen(w) && w.incident === 'fiber-cut' && w.propertyId === cut.splitter.propertyId)
+  const splitters = useStore((s) => s.ops.splitters)
+  const wo = fiberCutWorkOrderFor(cut.splitter.id, splitters, workOrders)
   const tech = technicians.find((t) => t.id === wo?.assigneeId)
   const property = properties.find((p) => p.id === cut.splitter.propertyId)
 

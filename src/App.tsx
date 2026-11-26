@@ -13,6 +13,7 @@ import ResidentAutomations from '@/pages/resident/Automations'
 import ResidentSupport from '@/pages/resident/Support'
 import OpsOverview from '@/pages/ops/Overview'
 import OpsNetwork from '@/pages/ops/Network'
+import OpsFiber from '@/pages/ops/Fiber'
 import OpsWorkOrders from '@/pages/ops/WorkOrders'
 import OpsMaintenance from '@/pages/ops/Maintenance'
 import OpsInstalls from '@/pages/ops/Installs'
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/ops" element={<OpsLayout />}>
           <Route index element={<OpsOverview />} />
           <Route path="network" element={<OpsNetwork />} />
+          <Route path="fiber" element={<OpsFiber />} />
           <Route path="work-orders" element={<OpsWorkOrders />} />
           <Route path="maintenance" element={<OpsMaintenance />} />
           <Route path="installs" element={<OpsInstalls />} />

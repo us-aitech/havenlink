@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { useStore } from '@/store/useStore'
 import type { Ont, OntStatus, Splitter } from '@/types'
+import { locateFiberFaults } from '@/lib/fiber'
 import { OntCell, OntLegend } from './NetParts'
 import { ONT_STATUS_ICON } from './NetUtils'
 
@@ -116,17 +117,17 @@ export function NetTopology({ propertyId, selectedOntId, onSelectOnt }: { proper
       if (list) list.push(view)
       else views.set(o.splitterId, [view])
     }
-    const allLos = (list: OntView[]) => list.length > 0 && list.every((v) => v.ont.status === 'los')
+    const dark = new Set(locateFiberFaults(splitters, onts).filter((f) => f.level === 'feeder' || f.level === 'splitter').map((f) => f.splitter.id))
     const local = splitters.filter((s) => s.propertyId === propertyId)
     return local
       .filter((s) => s.parentId === null)
       .map((primary) => {
         const kids = local.filter((s) => s.parentId === primary.id).map((s) => ({ splitter: s, views: views.get(s.id) ?? [] }))
         const all = kids.flatMap((c) => c.views)
-        const cut = allLos(all)
+        const cut = dark.has(primary.id)
         return {
           primary,
-          children: kids.map((c) => ({ ...c, cut: !cut && allLos(c.views) })),
+          children: kids.map((c) => ({ ...c, cut: dark.has(c.splitter.id) })),
           total: all.length,
           online: all.filter((v) => v.status === 'online').length,
           cut,

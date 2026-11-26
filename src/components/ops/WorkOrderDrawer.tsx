@@ -146,6 +146,29 @@ function IncidentCallout({ wo }: { wo: WorkOrder }) {
     )
   }
 
+  if (wo.incident === 'drop-fault' || wo.incident === 'ont-power') {
+    const ont = onts.find((o) => o.id === wo.ontId)
+    const splitter = splitters.find((s) => s.id === ont?.splitterId)
+    const ok = ont?.status === 'online' || ont?.status === 'degraded'
+    const power = wo.incident === 'ont-power'
+    return (
+      <Callout
+        tone={ok ? 'good' : power ? 'neutral' : 'warning'}
+        icon={ok ? CircleCheck : Unplug}
+        title={ok ? 'ONT has fiber signal again' : power ? 'ONT not responding · likely power' : 'No fiber signal at this home only'}
+      >
+        <p>
+          {splitter ? `${splitter.name} · ${splitter.cabinet}. ` : ''}
+          {ok
+            ? 'Light is reaching the ONT and it is reporting to the OLT.'
+            : power
+              ? 'No loss-of-signal alarm before it dropped. Confirm power with the resident first; if the ONT is powered and its LOS light is on, treat it as a drop fault.'
+              : 'Neighbors on the same splitter still have light. Measure at the splitter port: light there means the drop or in-home fiber, no light means the splitter port.'}
+        </p>
+      </Callout>
+    )
+  }
+
   if (wo.incident === 'signal-degradation') {
     const ont = onts.find((o) => o.id === wo.ontId)
     const rx = ont?.isDemoHome ? homeNetwork.rxPowerDbm : (ont?.rxPowerDbm ?? null)

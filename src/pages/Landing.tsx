@@ -57,7 +57,7 @@ const BENEFITS: Array<{ icon: LucideIcon; title: string; text: string }> = [
 
 const SCENARIOS: Array<{ icon: LucideIcon; title: string; text: string }> = [
   { icon: Droplets, title: 'Burst pipe at 2 AM', text: 'Flow spikes to 10 GPM, the main valve closes in 3 seconds, the resident is alerted and a follow-up work order is opened.' },
-  { icon: Cable, title: 'Fiber cut in the street', text: 'Eight homes lose light. A P1 emergency is dispatched, hubs fail over to LTE and service returns when the ticket closes.' },
+  { icon: Cable, title: 'Splitter outage', text: 'Eight homes on one splitter lose light. The fault is located to the splitter, a P1 emergency is dispatched, hubs fail over to LTE and service returns when the ticket closes.' },
   { icon: Siren, title: 'Break-in while away', text: 'The lanai door opens while armed: siren, cameras recording, monitoring center notified, PIN to disarm.' },
 ]
 

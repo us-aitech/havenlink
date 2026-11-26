@@ -26,7 +26,7 @@ Open http://localhost:5173. Build with `npm run build` (output in `dist/`).
 | --- | --- | --- |
 | Landing | `/` | Proposal summary, ISP partner selector, architecture, demo scenarios |
 | Resident app | `/home` | Lights, locks, garage, alarm (Home/Away, entry/exit delay, PIN), cameras, thermostat, **water leak detection with automatic valve shut-off**, fiber/WiFi status, speed test, automations, support requests |
-| Operations console | `/ops` | KPIs, live alerts, GPON topology (OLT → splitters → ONTs), work orders with SLA + workflow + photo documentation, preventive maintenance and light-level testing, smart-home install pipeline, properties, revenue model |
+| Operations console | `/ops` | KPIs, live alerts, GPON topology (OLT → splitters → ONTs), **fiber signal panel with fault location (street / splitter / home)**, work orders with SLA + workflow + photo documentation, preventive maintenance and light-level testing, smart-home install pipeline, properties, revenue model |
 
 ## Water protection logic
 
@@ -43,9 +43,10 @@ When a rule fires: the valve closes (3 s travel), the resident gets a critical a
 Use the purple **Demo simulator** button (bottom-right, available in both portals).
 
 1. **Burst pipe**: open `/home/water` → simulator → *Burst pipe*. Flow spikes to ~10 GPM, the valve closes, the alert appears. Open `/ops` to see the alert and the auto-created leak follow-up work order. Back on Water, click *Fixed — restore water*.
-2. **Fiber cut**: simulator → *Fiber cut in the street*. The resident sees the outage, LTE backup and repair tracking. In `/ops`, the P1 banner, the LOS splitter on *GPON network* and the emergency work order show up. Advance the work order to *Closed* and service comes back for all 8 homes.
-3. **Break-in**: simulator → *Break-in via lanai door*. Siren, cameras recording, monitoring center notified. Disarm with PIN **1234**.
-4. **ISP trouble ticket / install request**: they arrive in the Ops work-order queue and install pipeline in real time.
+2. **Fiber cut**: simulator → *Splitter outage*. The resident sees the outage, LTE backup and repair tracking. In `/ops`, the P1 banner, the LOS splitter on *GPON network* and the emergency work order show up. Advance the work order to *Closed* and service comes back for all 8 homes.
+3. **Where is the fault?** open `/ops/fiber` and run, one at a time (Reset between them): *Feeder cut in the street*, *Splitter outage*, *Drop cut at the demo home*, *Neighbor unplugs their ONT*. The panel only uses light / no light per ONT and compares each home with its neighbors on the same splitter and feeder, so each one lands at a different level (street → P1, splitter → P1, drop/in-home → P2, power → call the resident, no truck).
+4. **Break-in**: simulator → *Break-in via lanai door*. Siren, cameras recording, monitoring center notified. Disarm with PIN **1234**.
+5. **ISP trouble ticket / install request**: they arrive in the Ops work-order queue and install pipeline in real time.
 
 *Reset demo* in the simulator restores the initial state.
 

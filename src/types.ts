@@ -324,7 +324,7 @@ export interface Technician {
 export type WorkOrderType = 'trouble' | 'emergency' | 'maintenance' | 'install' | 'support'
 export type Priority = 'P1' | 'P2' | 'P3'
 export type WorkOrderSource = 'ISP Dispatch' | 'Auto-detect' | 'Resident' | 'Scheduled' | 'Property Manager'
-export type IncidentKind = 'fiber-cut' | 'signal-degradation' | 'leak-followup'
+export type IncidentKind = 'fiber-cut' | 'signal-degradation' | 'leak-followup' | 'drop-fault' | 'ont-power'
 
 export interface WorkOrderStageEntry {
   stage: string
@@ -457,6 +457,9 @@ export type ScenarioKey =
   | 'intrusion'
   | 'entry-door'
   | 'fiber-cut'
+  | 'feeder-cut'
+  | 'drop-cut'
+  | 'ont-power-loss'
   | 'signal-degradation'
   | 'install-request'
   | 'isp-trouble-ticket'

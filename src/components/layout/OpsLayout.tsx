@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
-import { ArrowRight, BarChart3, Building2, ClipboardList, LayoutDashboard, Menu, Network, PackageCheck, Wrench, X } from 'lucide-react'
+import { ArrowRight, BarChart3, Building2, Cable, ClipboardList, LayoutDashboard, Menu, Network, PackageCheck, Wrench, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatClock } from '@/lib/format'
 import { useNow, usePartner } from '@/lib/hooks'
+import { fiberSignal } from '@/lib/fiber'
 import { isOpen } from '@/lib/workflows'
 import { useStore } from '@/store/useStore'
 import { SimulatorPanel } from '../SimulatorPanel'
@@ -12,6 +13,7 @@ import { Breadcrumb, PartnerCard, SideNavSection, Sidebar, ThemeToggle, UserRow,
 const TITLES: Record<string, string> = {
   '/ops': 'Overview',
   '/ops/network': 'GPON network',
+  '/ops/fiber': 'Fiber signal',
   '/ops/work-orders': 'Work orders',
   '/ops/maintenance': 'Maintenance',
   '/ops/installs': 'Smart-home installs',
@@ -21,11 +23,13 @@ const TITLES: Record<string, string> = {
 
 function useNavSections() {
   const workOrders = useStore((s) => s.ops.workOrders)
+  const noSignal = useStore((s) => s.ops.onts.reduce((n, o) => n + (fiberSignal(o.status) === 'no-signal' ? 1 : 0), 0))
   const open = workOrders.filter(isOpen)
   const p1 = open.filter((w) => w.priority === 'P1').length
   const monitor: SideNavItem[] = [
     { to: '/ops', label: 'Overview', icon: LayoutDashboard, end: true },
     { to: '/ops/network', label: 'GPON network', icon: Network },
+    { to: '/ops/fiber', label: 'Fiber signal', icon: Cable, alert: noSignal ? `${noSignal} dark` : undefined },
   ]
   const field: SideNavItem[] = [
     { to: '/ops/work-orders', label: 'Work orders', icon: ClipboardList, count: open.filter((w) => w.type === 'trouble' || w.type === 'emergency' || w.type === 'support').length, alert: p1 ? `P1 · ${p1}` : undefined },

@@ -9,6 +9,7 @@ import { DEMO_ONT_ID } from '@/data/seed'
 import { cn } from '@/lib/cn'
 import { formatDuration, formatTime, timeAgo } from '@/lib/format'
 import { useNow, usePartner } from '@/lib/hooks'
+import { fiberCutReaches } from '@/lib/fiber'
 import { WORKFLOWS, isOpen } from '@/lib/workflows'
 import { useStore } from '@/store/useStore'
 import type { ClientKind } from '@/types'
@@ -50,8 +51,11 @@ export default function Network() {
   const navigate = useNavigate()
   const now = useNow(500)
 
+  const splitters = useStore((s) => s.ops.splitters)
   const ont = onts.find((o) => o.id === DEMO_ONT_ID)
-  const repair = workOrders.find((w) => isOpen(w) && (w.incident === 'fiber-cut' || (w.incident === 'signal-degradation' && w.ontId === DEMO_ONT_ID)))
+  const repair = workOrders.find(
+    (w) => isOpen(w) && ((ont !== undefined && fiberCutReaches(w, ont, splitters)) || (w.ontId === DEMO_ONT_ID && (w.incident === 'signal-degradation' || w.incident === 'drop-fault' || w.incident === 'ont-power'))),
+  )
   const tech = repair ? technicians.find((t) => t.id === repair.assigneeId) : null
   const stages = repair ? WORKFLOWS[repair.type] : []
   const stageIdx = repair ? stages.findIndex((s) => s.key === repair.stage) : -1
